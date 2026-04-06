@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "technitium.fullname" . }}
+  labels:
+    {{- include "technitium.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "technitium.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "technitium.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: technitium-dns-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: 5380
+              name: web-ui
+            - containerPort: 53
+              name: dns-udp
+              protocol: UDP
+            - containerPort: 53
+              name: dns-tcp
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          env:
+            - name: DNS_SERVER_DOMAIN
+              value: {{ required "A valid .Values.config.dnsDomain is required!" .Values.config.dnsDomain | quote }}
+            - name: DNS_SERVER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "technitium.fullname" . }}-admin
+                  key: password
+                      {{- if .Values.config.preferIpv6 }}
+            - name: DNS_SERVER_PREFER_IPV6
+              value: {{ .Values.config.preferIpv6 | quote }}
+                      {{- end }}
+                      {{- if .Values.config.recursion }}
+            - name: DNS_SERVER_RECURSION
+              value: {{ .Values.config.recursion | quote }}
+                      {{- end }}
+                      {{- if .Values.config.recursionAcl }}
+            - name: DNS_SERVER_RECURSION_NETWORK_ACL
+              value: {{ .Values.config.recursionAcl | quote }}
+                      {{- end }}
+                      {{- if .Values.config.enableBlocking }}
+            - name: DNS_SERVER_ENABLE_BLOCKING
+              value: {{ .Values.config.enableBlocking | quote }}
+                      {{- end }}
+                      {{- if .Values.config.forwarders }}
+            - name: DNS_SERVER_FORWARDERS
+              value: {{ .Values.config.forwarders | quote }}
+                      {{- end }}
+                      {{- if .Values.config.forwarderProtocol }}
+            - name: DNS_SERVER_FORWARDER_PROTOCOL
+              value: {{ .Values.config.forwarderProtocol | quote }}
+                      {{- end }}
+                      {{- if .Values.config.logLocalTime }}
+            - name: DNS_SERVER_LOG_USING_LOCAL_TIME
+              value: {{ .Values.config.logLocalTime | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: config-storage
+              mountPath: /etc/dns/config
+      volumes:
+        - name: config-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-config-pvc" (include "technitium.fullname" .)) }}
