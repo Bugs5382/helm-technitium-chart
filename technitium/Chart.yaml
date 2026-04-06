@@ -1,0 +1,6 @@
+apiVersion: v2
+name: technitium
+description: Technitium DNS
+type: application
+version: 0.0.0
+appVersion: "14.3.0"
