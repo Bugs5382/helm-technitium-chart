@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Update Release Draft
-        uses: release-drafter/release-drafter@master
+        uses: release-drafter/release-drafter@v7.1.1
         with:
           commitish: ${{ github.ref_name }}
         env:
