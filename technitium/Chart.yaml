@@ -3,4 +3,5 @@ name: technitium
 description: Technitium DNS
 type: application
 version: 0.0.0
+icon: https://www.gravatar.com/avatar/5395c1eea64539b6ac2bf1b17d98dccd?s=120&r=g&d=404
 appVersion: "14.3.0"

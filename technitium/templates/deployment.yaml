@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: technitium-dns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: technitium
+  template:
+    metadata:
+      labels:
+        app: technitium
+    spec:
+      containers:
+        - name: dns-server
+          image: technitium/dns-server:latest
+          ports:
+            - containerPort: 5380
+              name: web-ui
+            - containerPort: 53
+              name: dns-udp
+              protocol: UDP
+            - containerPort: 53
+              name: dns-tcp
+              protocol: TCP
+          env:
+            - name: DNS_SERVER_DOMAIN
+              value: "dns-server" # Change to your preferred hostname
+          volumeMounts:
+            - name: config-storage
+              mountPath: /etc/dns/config
+      volumes:
+        - name: config-storage
+          persistentVolumeClaim:
+            claimName: technitium-config-pvc
