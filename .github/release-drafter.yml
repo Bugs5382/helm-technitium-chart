@@ -11,12 +11,9 @@ template: |
 categories:
   - title: 🚀 Features
     labels:
-      - feature
-      - feat
       - enhancement
   - title: 🐛 Bug Fixes
     labels:
-      - fix
       - bug
   - title: ⚠️ Changes
     labels:
@@ -32,11 +29,9 @@ categories:
       - security
   - title: 📄 Documentation
     labels:
-      - docs
       - documentation
   - title: 🧩 Dependency Updates
     labels:
-      - deps
       - dependencies
     collapse-after: 5
 prerelease-identifier: 'beta'
@@ -48,8 +43,6 @@ version-resolver:
       - 'breaking'
   minor:
     labels:
-      - 'feature'
-      - 'feat'
       - 'enhancement'
   patch:
     labels:
