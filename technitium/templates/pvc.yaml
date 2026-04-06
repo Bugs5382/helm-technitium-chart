@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: technitium-config-pvc
+  name: {{ include "technitium.fullname" . }}-config-pvc
   labels:
     {{- include "technitium.labels" . | nindent 4 }}
 spec:
