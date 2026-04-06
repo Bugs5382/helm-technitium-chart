@@ -9,23 +9,24 @@ This Helm chart simplifies the deployment of **Technitium DNS Server** on Kubern
 To install the chart with the release name `my-dns`:
 
 ```bash
-helm install technitium-dns-server technitium/ --set config.dnsDomain="dns-server"```
+helm install technitium-dns-server technitium --set config.dnsDomain="dns-server" [ -n technitium ]
 ```
 
 ## ⚙️ Configuration
 
 The following table lists the configurable parameters of the Technitium chart and their default values.
 
-| Parameter | Description                                                       | Default                       | Required |
-|-----------|-------------------------------------------------------------------|-------------------------------|:---:|
-| 🔑 `config.dnsDomain` | The primary name used by the DNS Server for ID Only.              | `""`                          | **YES** |
-| 🖼️ `image.repository` | Container image repository                                        | `technitium/dns-server`       | No |
-| 🏷️ `image.tag` | Container image tag (defaults to `app version`)                   | `app version in Chart.yaml`   | No |
-| 🔄 `config.recursion` | Recursion policy: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`. | `AllowOnlyForPrivateNetworks` | No |
-| 🛡️ `config.enableBlocking` | Enables blocking using Blocked Zones and Block Lists.             | `true`                        | No |
-| 📡 `config.forwarders` | Comma separated list of upstream forwarders.                      | `1.1.1.1, 8.8.8.8`            | No |
-| 🔌 `service.type` | K8s Service type (`LoadBalancer`, `NodePort`, etc.)               | `LoadBalancer`                | No |
-| 💾 `persistence.size` | Size of the persistent volume.                                    | `2Gi`                         | No |
+| Parameter | Description                                                                                    | Default                    | Required |
+|-----------|------------------------------------------------------------------------------------------------|----------------------------|:---:|
+| 🔑 `config.dnsDomain` | The primary name used by the DNS Server for ID Only.                                           | `""`                       | **YES** |
+| 🖼️ `image.repository` | Container image repository                                                                     | `technitium/dns-server`    | No |
+| 🏷️ `image.tag` | Container image tag (defaults to `app version`)                                                | `app version in Chart.yaml` | No |
+| 🔄 `config.recursion` | Recursion policy: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`.                              | `AllowOnlyForPrivateNetworks` | No |
+| 🛡️ `config.enableBlocking` | Enables blocking using Blocked Zones and Block Lists.                                          | `true`                     | No |
+| 📡 `config.forwarders` | Comma separated list of upstream forwarders.                                                   | `1.1.1.1, 8.8.8.8`         | No |
+| 🔌 `service.type` | K8s Service type (`LoadBalancer`, `NodePort`, etc.)                                            | `LoadBalancer`             | No |
+| 💾 `persistence.size` | Size of the persistent volume.                                                                 | `2Gi`                      | No |
+| 💾 `persistence.storageClass` | Storage class where the PVC will not deleted. If not default to do so, make sure you set this. | ``                         | No |
 
 ## 🔐 Security & Admin Password
 
