@@ -3,11 +3,11 @@ kind: Service
 metadata:
   name: {{ include "technitium.fullname" . }}
   labels:
-    {{ include "technitium.labels" . | nindent 4 }}
+    {{- include "technitium.labels" . | nindent 4 }}
 spec:
   type: {{ (index .Values "service" | default dict).type | default "LoadBalancer" }}
   selector:
-    {{ include "technitium.selectorLabels" . | nindent 4 }}
+    {{- include "technitium.selectorLabels" . | nindent 4 }}
   ports:
     - name: web-ui
       port: 5380

@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: technitium-config-pvc
   labels:
-    {{ include "technitium.labels" . | nindent 4 }}
+    {{- include "technitium.labels" . | nindent 4 }}
 spec:
   accessModes:
     - {{ (index .Values "persistence" | default dict).accessMode | default "ReadWriteOnce" }}

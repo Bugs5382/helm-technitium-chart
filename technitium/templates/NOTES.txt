@@ -1,0 +1,15 @@
+🚀 Technitium DNS Server has been successfully deployed!
+
+1. 🔐 Get your Admin Password:
+   Run the following command to retrieve the password for the 'admin' user:
+
+   kubectl get secret --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}-admin -o jsonpath="{.data.password}" | base64 --decode; echo
+
+2. 🌐 Access the Web UI:
+{{- if contains "LoadBalancer" (.Values.service.type | default "") }}
+   The service is type LoadBalancer. Get the external IP:
+   kubectl get svc --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}
+{{- else }}
+   Port-forward to access the UI at http://127.0.0.1:5380:
+   kubectl port-forward svc/{{ include "technitium.fullname" . }} 5380:5380
+{{- end }}

@@ -1,7 +1,24 @@
 # Default values for Technitium.
 
+# Name of the DNS Server
+
+
+# Technitium Specific Configurations
+config:
+  dnsDomain: "dns-server"
+  # Leave empty to automatically generate a random 16-character password
+  adminPassword: ""
+  # preferIpv6: false
+  # recursion: AllowOnlyForPrivateNetworks
+  # Example ACL: "192.168.10.0/24, !192.168.10.2"
+  # recursionAcl: ""
+  # enableBlocking: true
+  # forwarders: "1.1.1.1, 8.8.8.8"
+  # forwarderProtocol: "Udp"
+  # logLocalTime: true
+
 image:
-  repository: technitium
+  repository: technitium/dns-server
   pullPolicy: IfNotPresent
   # tag: "14.3.0"
 
