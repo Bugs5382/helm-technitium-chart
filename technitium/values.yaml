@@ -1,0 +1,14 @@
+# Default values for Technitium.
+
+image:
+  repository: technitium
+  pullPolicy: IfNotPresent
+  # tag: "14.3.0"
+
+service: {}
+  # type: ClusterIP
+
+persistence: {}
+  # accessMode: ReadWriteOnce
+  # size: 2Gi
+  # storageClass:

@@ -1,14 +1,18 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: technitium-service
+  name: {{ include "technitium.fullname" . }}
+  labels:
+    {{ include "technitium.labels" . | nindent 4 }}
 spec:
+  type: {{ (index .Values "service" | default dict).type | default "LoadBalancer" }}
   selector:
-    app: technitium
+    {{ include "technitium.selectorLabels" . | nindent 4 }}
   ports:
     - name: web-ui
       port: 5380
       targetPort: 5380
+      protocol: TCP
     - name: dns-udp
       port: 53
       protocol: UDP
@@ -17,4 +21,3 @@ spec:
       port: 53
       protocol: TCP
       targetPort: 53
-  type: LoadBalancer

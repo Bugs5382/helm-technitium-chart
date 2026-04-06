@@ -1,20 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: technitium-dns
+  name: {{ include "technitium.fullname" . }}
+  labels:
+    {{ include "technitium.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: technitium
+      {{ include "technitium.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: technitium
+        {{ include "technitium.selectorLabels" . | nindent 8 }}
     spec:
       containers:
-        - name: dns-server
-          image: technitium/dns-server:latest
+        - name: technitium-dns-server
+          image: "{{ .Values.image.repository }}/dns-server:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 5380
               name: web-ui
@@ -24,13 +27,20 @@ spec:
             - containerPort: 53
               name: dns-tcp
               protocol: TCP
-          env:
-            - name: DNS_SERVER_DOMAIN
-              value: "dns-server" # Change to your preferred hostname
+          livenessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: config-storage
               mountPath: /etc/dns/config
       volumes:
         - name: config-storage
           persistentVolumeClaim:
-            claimName: technitium-config-pvc
+            claimName: {{ .Values.persistence.existingClaim | default (include "technitium.fullname" .) }}
