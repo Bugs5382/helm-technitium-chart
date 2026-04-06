@@ -29,12 +29,7 @@ jobs:
         uses: helm/kind-action@v1.10.0
 
       - name: Lint Charts
-        run: |
-          if [ -d "charts" ]; then
-            helm lint technitium/*
-          else
-            echo "No charts directory found, skipping lint."
-          fi
+        run: helm lint technitium
 
       - name: Dry Run Install
         if: github.event.pull_request.draft == false
