@@ -37,6 +37,20 @@ To retrieve your generated password after deployment, run:
 kubectl get secret technitium-admin -o jsonpath="{.data.password}" | base64 --decode; echo
 ```
 
+## 🌐 Ingress
+
+To enable the Web UI via an Ingress controller (like Traefik), update your `values.yaml`:
+
+```yaml
+ingress:
+  enabled: true
+  hosts:
+    - host: dns.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+ ```
+
 ## 🤝 Acknowledgments
 
 ### The Technitium Team
@@ -46,8 +60,6 @@ A huge thank you to the [Technitium](https://technitium.com/) team for building 
 ### ❤️ Personal Thanks
 
 Building and maintaining open-source tools takes time and focus. I want to give a special thanks to **my wife, my daughter, and my son**. Your support and patience allow me the space to be a "geek" and contribute back to the community. You are my greatest motivation\!
-
------
 
 ## ⚖️ Disclaimers & Licensing
 

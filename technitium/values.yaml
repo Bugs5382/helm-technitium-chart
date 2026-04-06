@@ -29,3 +29,16 @@ persistence: {}
   # accessMode: ReadWriteOnce
   # size: 2Gi
   # storageClass:
+
+ingress:
+  enabled: true
+  hosts:
+    - host: admin.technitium.local
+      paths:
+        - path: /
+          pathType: Prefix
+          port: 5380
+  tls: []
+  #  - secretName: technitium-tls
+  #    hosts:
+  #      -  admin.technitium.local
