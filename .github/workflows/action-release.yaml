@@ -1,9 +1,16 @@
-name: Release Charts
-
+name: Release and Publish
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+  workflow_call:
+  release:
+    types:
+      - released
+
+permissions:
+  contents: write
+  actions: write
+  checks: write
+  id-token: write
 
 jobs:
 
@@ -28,12 +35,14 @@ jobs:
     env:
       CLEAN_TAG: ${{ needs.Strip_Version.outputs.CLEAN_TAG }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           token: '${{ secrets.GITHUB_TOKEN }}'
           ref: ${{ env.GIT_BRANCH_TARGET }}
           sparse-checkout: |
             CHANGELOG.md
+            technitium/Chart.yaml
           sparse-checkout-cone-mode: false
 
       - name: Update Chart Version
