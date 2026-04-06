@@ -75,7 +75,7 @@ spec:
             {{- end }}
           volumeMounts:
             - name: config-storage
-              mountPath: /etc/dns/config
+              mountPath: /etc/dns
       volumes:
         - name: config-storage
           persistentVolumeClaim:
