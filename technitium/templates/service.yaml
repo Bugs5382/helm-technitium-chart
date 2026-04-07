@@ -4,20 +4,72 @@ metadata:
   name: {{ include "technitium.fullname" . }}
   labels:
     {{- include "technitium.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  type: {{ (index .Values "service" | default dict).type | default "LoadBalancer" }}
+  type: {{ .Values.service.type | default "LoadBalancer" }}
   selector:
     {{- include "technitium.selectorLabels" . | nindent 4 }}
   ports:
-    - name: web-ui
-      port: 5380
-      targetPort: 5380
+    - name: web-ui-http
+      port: {{ .Values.ports.webHttp | default 5380 }}
+      targetPort: web-ui-http
       protocol: TCP
+    {{- if .Values.config.webServiceEnableHttps }}
+    - name: web-ui-https
+      port: {{ .Values.ports.webHttps | default 53443 }}
+      targetPort: web-ui-https
+      protocol: TCP
+    {{- end }}
     - name: dns-udp
       port: 53
+      targetPort: dns-udp
       protocol: UDP
-      targetPort: 53
     - name: dns-tcp
       port: 53
+      targetPort: dns-tcp
       protocol: TCP
-      targetPort: 53
+  {{- if .Values.ports.doq.enabled }}
+    - name: doq-udp
+      port: 853
+      targetPort: doq-udp
+      protocol: UDP
+  {{- end }}
+  {{- if .Values.ports.dot.enabled }}
+    - name: dot-tcp
+      port: 853
+      targetPort: dot-tcp
+      protocol: TCP
+  {{- end }}
+  {{- if .Values.ports.doh3.enabled }}
+    - name: doh3-udp
+      port: 443
+      targetPort: doh3-udp
+      protocol: UDP
+  {{- end }}
+  {{- if .Values.ports.doh.enabled }}
+    - name: doh-tcp
+      port: 443
+      targetPort: doh-tcp
+      protocol: TCP
+  {{- end }}
+  {{- if .Values.ports.dohHttpProxy.enabled }}
+    - name: doh-proxy-http
+      port: 80
+      targetPort: doh-proxy-http
+      protocol: TCP
+  {{- end }}
+  {{- if .Values.ports.dohProxy.enabled }}
+    - name: doh-proxy
+      port: 8053
+      targetPort: doh-proxy
+      protocol: TCP
+  {{- end }}
+  {{- if .Values.ports.dhcp.enabled }}
+    - name: dhcp
+      port: 67
+      targetPort: dhcp
+      protocol: UDP
+      {{- end }}
