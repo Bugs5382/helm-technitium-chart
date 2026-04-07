@@ -14,19 +14,61 @@ spec:
       labels:
         {{- include "technitium.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "technitium.serviceAccountName" . }}
       containers:
         - name: technitium-dns-server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
-            - containerPort: 5380
-              name: web-ui
+            - containerPort: {{ .Values.ports.webHttp | default 5380 }}
+              name: web-ui-http
+              protocol: TCP
+                    {{- if .Values.config.webServiceEnableHttps }}
+            - containerPort: {{ index .Values "ports" "webHttps" | default 53443 }}
+              name: web-ui-https
+              protocol: TCP
+                    {{- end }}
             - containerPort: 53
               name: dns-udp
               protocol: UDP
             - containerPort: 53
               name: dns-tcp
               protocol: TCP
+                  {{- if index .Values "ports" "doq" "enabled" }}
+            - containerPort: 853
+              name: doq-udp
+              protocol: UDP
+                  {{- end }}
+                  {{- if index .Values "ports" "dot" "enabled" }}
+            - containerPort: 853
+              name: dot-tcp
+              protocol: TCP
+                  {{- end }}
+                  {{- if index .Values "ports" "doh3" "enabled" }}
+            - containerPort: 443
+              name: doh3-udp
+              protocol: UDP
+                  {{- end }}
+                  {{- if index .Values "ports" "doh" "enabled" }}
+            - containerPort: 443
+              name: doh-tcp
+              protocol: TCP
+                  {{- end }}
+                  {{- if index .Values "ports" "dohHttpProxy" "enabled" }}
+            - containerPort: 80
+              name: doh-proxy-http
+              protocol: TCP
+                  {{- end }}
+                  {{- if index .Values "ports" "dohProxy" "enabled" }}
+            - containerPort: 8053
+              name: doh-proxy
+              protocol: TCP
+                  {{- end }}
+                  {{- if index .Values "ports" "dhcp" "enabled" }}
+            - containerPort: 67
+              name: dhcp
+              protocol: UDP
+                  {{- end }}
           livenessProbe:
             tcpSocket:
               port: dns-tcp
@@ -45,34 +87,84 @@ spec:
                 secretKeyRef:
                   name: {{ include "technitium.fullname" . }}-admin
                   key: password
-                      {{- if .Values.config.preferIpv6 }}
+                  {{- if .Values.config.preferIpv6 }}
             - name: DNS_SERVER_PREFER_IPV6
               value: {{ .Values.config.preferIpv6 | quote }}
-                      {{- end }}
-                      {{- if .Values.config.recursion }}
+                  {{- end }}
+                  {{- if .Values.config.webServiceLocalAddresses }}
+            - name: DNS_SERVER_WEB_SERVICE_LOCAL_ADDRESSES
+              value: {{ .Values.config.webServiceLocalAddresses | quote }}
+                  {{- end }}
+            - name: DNS_SERVER_WEB_SERVICE_HTTP_PORT
+              value: {{ .Values.ports.webHttp | default 5380 | quote }}
+                  {{- if .Values.config.webServiceEnableHttps }}
+            - name: DNS_SERVER_WEB_SERVICE_HTTPS_PORT
+              value: {{ index .Values "ports" "webHttps" | default 53443 | quote }}
+                  {{- end }}
+                  {{- if .Values.config.webServiceEnableHttps }}
+            - name: DNS_SERVER_WEB_SERVICE_ENABLE_HTTPS
+              value: {{ .Values.config.webServiceEnableHttps | quote }}
+                  {{- end }}
+                  {{- if .Values.config.webServiceUseSelfSignedCert }}
+            - name: DNS_SERVER_WEB_SERVICE_USE_SELF_SIGNED_CERT
+              value: {{ .Values.config.webServiceUseSelfSignedCert | quote }}
+                  {{- end }}
+                  {{- if .Values.config.webServiceEnableHttps }}
+            - name: DNS_SERVER_WEB_SERVICE_TLS_CERTIFICATE_PATH
+              value: {{ .Values.config.webServiceTlsCertificatePath | quote }}
+                  {{- end }}
+                  {{- if .Values.config.webServiceTlsCertificatePassword }}
+            - name: DNS_SERVER_WEB_SERVICE_TLS_CERTIFICATE_PASSWORD
+              value: {{ .Values.config.webServiceTlsCertificatePassword | quote }}
+                  {{- end }}
+                  {{- if .Values.config.webServiceHttpToTlsRedirect }}
+            - name: DNS_SERVER_WEB_SERVICE_HTTP_TO_TLS_REDIRECT
+              value: {{ .Values.config.webServiceHttpToTlsRedirect | quote }}
+                  {{- end }}
+                  {{- if .Values.config.optionalProtocolDnsOverHttp }}
+            - name: DNS_SERVER_OPTIONAL_PROTOCOL_DNS_OVER_HTTP
+              value: {{ .Values.config.optionalProtocolDnsOverHttp | quote }}
+                  {{- end }}
+                  {{- if .Values.config.recursion }}
             - name: DNS_SERVER_RECURSION
               value: {{ .Values.config.recursion | quote }}
-                      {{- end }}
-                      {{- if .Values.config.recursionAcl }}
+                  {{- end }}
+                  {{- if .Values.config.recursionAcl }}
             - name: DNS_SERVER_RECURSION_NETWORK_ACL
               value: {{ .Values.config.recursionAcl | quote }}
-                      {{- end }}
-                      {{- if .Values.config.enableBlocking }}
+                  {{- end }}
+                  {{- if .Values.config.recursionDeniedNetworks }}
+            - name: DNS_SERVER_RECURSION_DENIED_NETWORKS
+              value: {{ .Values.config.recursionDeniedNetworks | quote }}
+                  {{- end }}
+                  {{- if .Values.config.recursionAllowedNetworks }}
+            - name: DNS_SERVER_RECURSION_ALLOWED_NETWORKS
+              value: {{ .Values.config.recursionAllowedNetworks | quote }}
+                  {{- end }}
+                  {{- if .Values.config.enableBlocking }}
             - name: DNS_SERVER_ENABLE_BLOCKING
               value: {{ .Values.config.enableBlocking | quote }}
-                      {{- end }}
-                      {{- if .Values.config.forwarders }}
+                  {{- end }}
+                  {{- if .Values.config.allowTxtBlockingReport }}
+            - name: DNS_SERVER_ALLOW_TXT_BLOCKING_REPORT
+              value: {{ .Values.config.allowTxtBlockingReport | quote }}
+                  {{- end }}
+                  {{- if .Values.config.blockListUrls }}
+            - name: DNS_SERVER_BLOCK_LIST_URLS
+              value: {{ .Values.config.blockListUrls | quote }}
+                  {{- end }}
+                  {{- if .Values.config.forwarders }}
             - name: DNS_SERVER_FORWARDERS
               value: {{ .Values.config.forwarders | quote }}
-                      {{- end }}
-                      {{- if .Values.config.forwarderProtocol }}
+                  {{- end }}
+                  {{- if .Values.config.forwarderProtocol }}
             - name: DNS_SERVER_FORWARDER_PROTOCOL
               value: {{ .Values.config.forwarderProtocol | quote }}
-                      {{- end }}
-                      {{- if .Values.config.logLocalTime }}
+                  {{- end }}
+                  {{- if .Values.config.logLocalTime }}
             - name: DNS_SERVER_LOG_USING_LOCAL_TIME
               value: {{ .Values.config.logLocalTime | quote }}
-            {{- end }}
+                  {{- end }}
           volumeMounts:
             - name: config-storage
               mountPath: /etc/dns

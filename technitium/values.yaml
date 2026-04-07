@@ -1,26 +1,86 @@
 # Default values for Technitium.
 
-# Name of the DNS Server
-
-
 # Technitium Specific Configurations
 config:
+  # The primary server  name used by this DNS Server to identify itself.
   dnsDomain: "dns-server"
-  # Leave empty to automatically generate a random 16-character password
+
+  # Plain text password for the DNS web console admin user.
+  # Note: In the deployment spec, this is usually pulled from a Secret for better security.
   adminPassword: ""
-  # preferIpv6: false
-  # recursion: AllowOnlyForPrivateNetworks
-  # Example ACL: "192.168.10.0/24, !192.168.10.2"
-  # recursionAcl: ""
-  # enableBlocking: true
-  # forwarders: "1.1.1.1, 8.8.8.8"
-  # forwarderProtocol: "Udp"
-  # logLocalTime: true
+
+  # Comma-separated list of IP addresses the web service should listen on.
+  # Usually only needed when using "host" network mode; defaults to "[::]" (all interfaces).
+  webServiceLocalAddresses: ""
+
+  # Enables HTTPS for the web-based management console.
+  # If true, ensure ports.webHttps is set to the desired port it will listen on..
+  webServiceEnableHttps: ""
+
+  # If true, the server generates a self-signed TLS certificate for the web console.
+  webServiceUseSelfSignedCert: ""
+
+  # The full file path inside the container to a .pfx TLS certificate file.
+  webServiceTlsCertificatePath: "/etc/dns/tls/cert.pfx"
+
+  # The password required to open the .pfx TLS certificate file.
+  webServiceTlsCertificatePassword: ""
+
+  # If true, any requests coming in on the HTTP port are automatically redirected to HTTPS.
+  webServiceHttpToTlsRedirect: ""
+
+  # Enables the DNS-over-HTTP protocol (usually on port 8053).
+  # Use this when placing the server behind a TLS-terminating reverse proxy.
+  optionalProtocolDnsOverHttp: ""
+
+  # Comma-separated list of IP ranges to explicitly DENY from using recursion.
+  # Pro-tip: This is technically obsolete; recursionAcl (ACL) is the preferred modern method.
+  recursionDeniedNetworks: ""
+
+  # Comma-separated list of IP ranges to explicitly ALLOW for recursion.
+  # Pro-tip: This is also technically obsolete in favor of recursionAcl.
+  recursionAllowedNetworks: ""
+
+  # If true, the server responds with a TXT record explaining why a domain was blocked.
+  allowTxtBlockingReport: ""
+
+  # A comma-separated list of URLs for block lists (e.g., Ad-blocking or Malware lists).
+  blockListUrls: ""
 
 image:
+  # The Docker Hub repository for the Technitium DNS image.
   repository: technitium/dns-server
+  # Kubernetes image pull policy (IfNotPresent, Always, or Never).
   pullPolicy: IfNotPresent
-  # tag: "14.3.0"
+  # Overrides the image tag whose default is the chart appVersion.
+  # tag: ""
+
+ports:
+  # Port for the DNS web management console (HTTP).
+  webHttp: 5380
+  # Port for HTTPS web console access.
+  webHttps: 53443
+  doq:
+    # DNS-over-QUIC (UDP/853). High performance, encrypted DNS.
+    enabled: false
+  dot:
+    # DNS-over-TLS (TCP/853). Standard encrypted DNS.
+    enabled: false
+  doh3:
+    # DNS-over-HTTPS (UDP/443). Uses HTTP/3 for encrypted queries.
+    enabled: false
+  doh:
+    # DNS-over-HTTPS (TCP/443). Uses HTTP/1.1 or HTTP/2.
+    enabled: false
+  dohHttpProxy:
+    # DNS-over-HTTP (TCP/80). Useful for Certbot or specific reverse proxies.
+    enabled: false
+  dohProxy:
+    # DNS-over-HTTP (TCP/8053). Custom port for use behind a TLS-terminating proxy.
+    enabled: false
+  dhcp:
+    # DHCP Service (UDP/67). Enable if using the server to assign network IPs.
+    enabled: false
 
 service: {}
   # type: ClusterIP
@@ -30,8 +90,17 @@ persistence: {}
   # size: 2Gi
   # storageClass:
 
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
 ingress:
-  enabled: true
+  enabled: false
   hosts:
     - host: admin.technitium.local
       paths:

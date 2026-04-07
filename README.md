@@ -16,17 +16,45 @@ helm install technitium-dns-server technitium --set config.dnsDomain="dns-server
 
 The following table lists the configurable parameters of the Technitium chart and their default values.
 
-| Parameter | Description                                                                                    | Default                    | Required |
-|-----------|------------------------------------------------------------------------------------------------|----------------------------|:---:|
-| 🔑 `config.dnsDomain` | The primary name used by the DNS Server for ID Only.                                           | `""`                       | **YES** |
-| 🖼️ `image.repository` | Container image repository                                                                     | `technitium/dns-server`    | No |
-| 🏷️ `image.tag` | Container image tag (defaults to `app version`)                                                | `app version in Chart.yaml` | No |
-| 🔄 `config.recursion` | Recursion policy: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`.                              | `AllowOnlyForPrivateNetworks` | No |
-| 🛡️ `config.enableBlocking` | Enables blocking using Blocked Zones and Block Lists.                                          | `true`                     | No |
-| 📡 `config.forwarders` | Comma separated list of upstream forwarders.                                                   | `1.1.1.1, 8.8.8.8`         | No |
-| 🔌 `service.type` | K8s Service type (`LoadBalancer`, `NodePort`, etc.)                                            | `LoadBalancer`             | No |
-| 💾 `persistence.size` | Size of the persistent volume.                                                                 | `2Gi`                      | No |
-| 💾 `persistence.storageClass` | Storage class where the PVC will not deleted. If not default to do so, make sure you set this. | ``                         | No |
+Here is your updated README configuration table. I've organized it into logical sections—**Core**, **Web/Security**, **Network/DNS**, and **Infrastructure**—to keep it readable as it grows.
+
+### Configuration Parameters
+
+| Parameter                               | Description | Default | Required |
+|:----------------------------------------| :--- | :--- | :---: |
+| **Image Settings**                      | | | |
+| 🖼️ `image.repository`                  | Container image repository. | `technitium/dns-server` | No |
+| 🏷️ `image.tag`                         | Container image tag. | `Chart.AppVersion` | No |
+| 🔄 `image.pullPolicy`                   | K8s image pull policy. | `IfNotPresent` | No |
+| **DNS Core Config**                     | | | |
+| 🔑 `config.dnsDomain`                   | The primary domain name used by the DNS Server to identify itself. | `""` | **YES** |
+| 🛡️ `config.enableBlocking`             | Enables blocking using Blocked Zones and Block Lists. | `true` | No |
+| 📡 `config.forwarders`                  | Comma separated list of upstream forwarders. | `1.1.1.1, 8.8.8.8` | No |
+| 🔌 `config.forwarderProtocol`           | Protocol for forwarders (`Udp`, `Tcp`, `Tls`, `Https`). | `Tcp` | No |
+| 🔄 `config.recursion`                   | Recursion policy: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`, `UseSpecifiedNetworkACL`. | `AllowOnlyForPrivateNetworks` | No |
+| 📝 `config.recursionAcl`                | Comma separated list of IPs/CIDRs to allow (use `!` to deny). | `""` | No |
+| 🕒 `config.logLocalTime`                | Use local time instead of UTC for logging. | `true` | No |
+| **Web UI & Security**                   | | | |
+| 👤 `config.adminPassword`               | Plain text password for the admin user (best set via Secret). | `""` | No |
+| 🔒 `config.webServiceEnableHttps`       | Enables HTTPS for the web management console. | `false` | No |
+| 📜 `config.webServiceUseSelfSignedCert` | Generates a self-signed TLS cert for the Web UI. | `false` | No |
+| 📂 `config.webServiceTlsCertificatePath`| Container path to a `.pfx` certificate file. | `/etc/dns/tls/cert.pfx`| No |
+| ↪️ `config.webServiceHttpToTlsRedirect` | Redirects HTTP Web UI traffic to HTTPS. | `false` | No |
+| **Port Toggles (Enabled Flags)**        | | | |
+| 🌐 `ports.webHttp`                      | Web UI (HTTP) on port `5380`. | `true` | No |
+| 🔐 `ports.webHttps`                     | Web UI (HTTPS) on port `53443`. | `false` | No |
+| 🚀 `ports.doq.enabled`                  | Enable DNS-over-QUIC (UDP) on port `853`. | `false` | No |
+| 🛡️ `ports.dot.enabled`                 | Enable DNS-over-TLS (TCP) on port `853`. | `false` | No |
+| 🔗 `ports.doh.enabled`                  | Enable DNS-over-HTTPS (TCP/UDP) on port `443`. | `false` | No |
+| 🌉 `ports.dohProxy.enabled`             | Enable DNS-over-HTTP (Proxy) on port `8053`. | `false` | No |
+| 🏠 `ports.dhcp.enabled`                 | Enable DHCP service on port `67`. | `false` | No |
+| **Infrastructure**                      | | | |
+| 🔌 `service.type`                       | K8s Service type (`LoadBalancer`, `ClusterIP`, `NodePort`). | `LoadBalancer` | No |
+| 🆔 `serviceAccount.create`              | Whether to create a dedicated Service Account. | `true` | No |
+| 💾 `persistence.size`                   | Size of the persistent volume for config and logs. | `2Gi` | No |
+| 💾 `persistence.storageClass`           | Storage class for the PVC. | `""` | No |
+
+> **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
 
 ## 🔐 Security & Admin Password
 
