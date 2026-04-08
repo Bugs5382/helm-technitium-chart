@@ -43,4 +43,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(release): ${{ steps.drafter.outputs.tag_name }} [skip ci]"
-          file_pattern: 'CHANGELOG.md technitium/**/Chart.yaml'
+          file_pattern: 'CHANGELOG.md technitium/Chart.yaml'
