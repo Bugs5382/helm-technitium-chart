@@ -1,4 +1,4 @@
-name: Test
+name: Lint_and_Test
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
       - ready_for_review
 
 jobs:
-  Lint:
+  Lint_and_Test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

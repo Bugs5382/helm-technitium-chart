@@ -9,11 +9,38 @@ jobs:
   Update_Draft_Release:
     name: Release Drafter
     runs-on: ubuntu-latest
+    # Added permissions to ensure the bot can write back to the repo
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
-      - name: Update Release Draft
-        uses: release-drafter/release-drafter@v7.1.1
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          commitish: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Run Release Drafter
+        id: drafter
+        uses: release-drafter/release-drafter@v6
+        with:
+          commitish: main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Helm Chart Version
+        run: |
+          CLEAN_TAG="${{ steps.drafter.outputs.tag_name }}"
+          find technitium -maxdepth 2 -name "Chart.yaml" -exec sed -i "s/^version:[[:space:]]*.*/version: ${CLEAN_TAG#v}/" {} +
+
+      - name: Update Changelog File
+        uses: stefanzweifel/changelog-updater-action@v1.9.1
+        with:
+          latest-version: ${{ steps.drafter.outputs.tag_name }}
+          release-notes: ${{ steps.drafter.outputs.body }}
+
+      - name: Commit and Push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(release): ${{ steps.drafter.outputs.tag_name }} [skip ci]"
+          file_pattern: 'CHANGELOG.md technitium/**/Chart.yaml'
