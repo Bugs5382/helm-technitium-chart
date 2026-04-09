@@ -9,7 +9,6 @@ jobs:
   Update_Draft_Release:
     name: Release Drafter
     runs-on: ubuntu-latest
-    # Added permissions to ensure the bot can write back to the repo
     permissions:
       contents: write
       pull-requests: write
