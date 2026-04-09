@@ -1,8 +1,11 @@
 # Ignore everything
 *
-Makefile
 
 # But inject license into these files...
 !*.tpl
 !*.yaml
 !*.yml
+
+# Ignore
+Makefile
+technitium/Chart.yaml
