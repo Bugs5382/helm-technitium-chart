@@ -9,7 +9,7 @@ NC=\033[0m
 endif
 
 WORKING_DIR := $(shell pwd)
-GOLIC_VERSION  ?= v0.7.2
+GOLIC_VERSION  ?= v0.1.0
 GOBIN=$(shell go env GOPATH)/bin
 
 .PHONY: lint-init
@@ -34,9 +34,9 @@ license:
 	@echo -e "\n$(YELLOW)Injecting the license$(NC)"
 	@if [ ! -f $(GOBIN)/golic ]; then \
 		echo "Installing golic..."; \
-		go install github.com/AbsaOSS/golic@latest; \
+		go install github.com/Bugs5382/golic@$(GOLIC_VERSION); \
 	fi
-	@$(GOBIN)/golic inject -t mit
+	@$(GOBIN)/golic inject -t mit -c "2026 Shane"
 
 .PHONY: lint
 lint:
