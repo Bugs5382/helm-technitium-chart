@@ -29,6 +29,11 @@ CYAN   := \033[1;36m
 RED    := \033[0;31m
 NC     := \033[0m
 
+define golic
+	@go install github.com/Bugs5382/golic@$(GOLIC_VERSION)
+	$(GOBIN)/golic inject $1
+endef
+
 .PHONY: license
 license:
 	@echo -e "\n$(YELLOW)Injecting the license$(NC)"
@@ -36,7 +41,7 @@ license:
 		echo "Installing golic..."; \
 		go install github.com/Bugs5382/golic@$(GOLIC_VERSION); \
 	fi
-	@$(GOBIN)/golic inject -t mit -c "2026 Shane"
+	golic inject -p '.golic.yaml' -t mit -c "2026 Shane"
 
 .PHONY: lint
 lint:
