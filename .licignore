@@ -5,6 +5,8 @@
 !*.tpl
 !*.yaml
 !*.yml
+!Makefile
 
 # Ignore
-Makefile
+technitium/Chart.yaml
+technitium/values.yaml
