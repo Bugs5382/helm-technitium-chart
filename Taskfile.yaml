@@ -1,0 +1,80 @@
+# MIT License
+#
+# Copyright (c) 2026 Shane & Contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+version: '3'
+vars:
+  GOLIC_VERSION: v0.2.0
+  COMMON_LIC: "2026 Shane & Contributors"
+  TEMPLATE_LIC: "mit"
+tasks:
+  default:
+    cmds:
+      - task: build
+  lint-init:
+    desc: Install linting tools via Brew
+    cmds:
+      - brew install golangci-lint gitleaks yamllint
+      - go install golang.org/x/tools/cmd/goimports@latest
+  lint:
+    desc: Run all linters and formatters
+    deps: [license]
+    cmds:
+      - goimports -w ./
+      - yamllint .
+      - gitleaks detect . --no-git --verbose --config=.gitleaks.toml
+  license:
+    desc: License injection
+    cmds:
+      - task: golic-inject-run
+        vars: { ARGS: '-t {{.TEMPLATE_LIC}} -c "{{.COMMON_LIC}}"' }
+  license-dry:
+    desc: Dry run for license injection
+    cmds:
+      - task: golic-inject-run
+        vars: { ARGS: '-d -t {{.TEMPLATE_LIC}} -c "{{.COMMON_LIC}}"' }
+  license-remove:
+    desc: License remove
+    cmds:
+      - task: golic-remove-run
+        vars: { ARGS: '-t {{.TEMPLATE_LIC}} -c "{{.COMMON_LIC}}"' }
+  license-remove-dry:
+    desc: Dry run for license remove
+    cmds:
+      - task: golic-remove-run
+        vars: { ARGS: '-d -t {{.TEMPLATE_LIC}} -c "{{.COMMON_LIC}}"' }
+  update-version:
+    desc: Updates the version variable in Taskfile.yml
+    vars:
+      NEW_VERSION: '{{.NEW_VERSION |"local"}}'
+    preconditions:
+      - sh: command -v yq
+        msg: "yq is not installed. Install it via 'brew install yq' or the GitHub Action."
+    cmds:
+      - yq -i '.version = "{{.NEW_VERSION}}"' "{{.TASKFILE_DIR}}/technitium/Charts.yaml"
+  golic-inject-run:
+    internal: true
+    cmds:
+      - go install github.com/Bugs5382/golic/cmd/golic@{{.GOLIC_VERSION}}
+      - "golic inject {{.ARGS}}"
+  golic-remove-run:
+    internal: true
+    cmds:
+      - go install github.com/Bugs5382/golic/cmd/golic@{{.GOLIC_VERSION}}
+      - "golic remove {{.ARGS}}"
