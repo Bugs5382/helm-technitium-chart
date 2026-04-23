@@ -62,7 +62,7 @@ tasks:
   update-helm-version:
     desc: Updates the Helm chart version in Chart.yaml
     vars:
-      NEW_VERSION: '{{ default "0.0.0-local" .NEW_VERSION }}'
+      NEW_VERSION: '{{ default "0.0.0" .NEW_VERSION }}'
     preconditions:
       - sh: command -v yq
         msg: "yq is not installed. Install it via 'brew install yq' or the GitHub Action."
