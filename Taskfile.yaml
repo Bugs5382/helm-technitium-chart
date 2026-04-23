@@ -26,7 +26,7 @@ vars:
 tasks:
   default:
     cmds:
-      - task: build
+      - task: lint
   lint-init:
     desc: Install linting tools via Brew
     cmds:
