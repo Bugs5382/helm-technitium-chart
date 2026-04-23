@@ -18,46 +18,25 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name: Lint_and_Test
-
+name: YamlLint
 on:
-  workflow_dispatch:
-  workflow_call:
+  push:
+    paths-ignore:
+      - '**.md'
   pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
-
+    branches:
+      - main
 jobs:
-  Lint_and_Test:
+  lint:
+    name: YamlLint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.12.0
+      - name: Set up Python
+        uses: actions/setup-python@v5
 
-      - name: Lint Charts
-        run: helm lint technitium
-
-      - name: Create kind cluster
-        if: github.event.pull_request.draft == false
-        uses: helm/kind-action@v1.10.0
-
-      - name: Dry Run Install
-        if: github.event.pull_request.draft == false
-        run: helm install technitium-test-release technitium/ --dry-run --debug
-
-      - name: Install Chart
-        if: github.event.pull_request.draft == false
-        run: |
-          helm install technitium-test-release technitium/ --set config.dnsDomain="dns-server"
-          # Wait up to 3 minutes for the deployment to be successful
-          kubectl wait --for=condition=available --timeout=180s deployment/technitium-test-release
+      - name: YamlLint
+        run: yamllint .

@@ -1,0 +1,12 @@
+# Ignore everything
+*
+
+# But inject license into these files...
+!*.tpl
+!*.yaml
+!*.yml
+!Makefile
+
+# Ignore
+technitium/Chart.yaml
+technitium/values.yaml

@@ -1,7 +1,5 @@
 # 🌐 Technitium DNS Server Helm Chart
 
-[](https://artifacthub.io/)
-
 This Helm chart simplifies the deployment of **Technitium DNS Server** on Kubernetes. Technitium is an open-source authoritative as well as recursive DNS server that is designed to be self-hosted and privacy-focused.
 
 ## 🚀 Quick Start
@@ -9,7 +7,10 @@ This Helm chart simplifies the deployment of **Technitium DNS Server** on Kubern
 To install the chart with the release name `my-dns`:
 
 ```bash
-helm install technitium-dns-server technitium --set config.dnsDomain="dns-server" [ -n technitium ]
+helm install my-dns technitium
+--set config.dnsDomain="dns-server"
+--namespace technitium
+--create-namespace
 ```
 
 ## ⚙️ Configuration
@@ -18,41 +19,46 @@ The following table lists the configurable parameters of the Technitium chart an
 
 Here is your updated README configuration table. I've organized it into logical sections—**Core**, **Web/Security**, **Network/DNS**, and **Infrastructure**—to keep it readable as it grows.
 
+
+## ⚙️ Configuration
+
+The following table lists the configurable parameters of the Technitium chart and their default values.
+
 ### Configuration Parameters
 
-| Parameter                               | Description | Default | Required |
-|:----------------------------------------| :--- | :--- | :---: |
-| **Image Settings**                      | | | |
-| 🖼️ `image.repository`                  | Container image repository. | `technitium/dns-server` | No |
-| 🏷️ `image.tag`                         | Container image tag. | `Chart.AppVersion` | No |
-| 🔄 `image.pullPolicy`                   | K8s image pull policy. | `IfNotPresent` | No |
-| **DNS Core Config**                     | | | |
-| 🔑 `config.dnsDomain`                   | The primary domain name used by the DNS Server to identify itself. | `""` | **YES** |
-| 🛡️ `config.enableBlocking`             | Enables blocking using Blocked Zones and Block Lists. | `true` | No |
-| 📡 `config.forwarders`                  | Comma separated list of upstream forwarders. | `1.1.1.1, 8.8.8.8` | No |
-| 🔌 `config.forwarderProtocol`           | Protocol for forwarders (`Udp`, `Tcp`, `Tls`, `Https`). | `Tcp` | No |
-| 🔄 `config.recursion`                   | Recursion policy: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`, `UseSpecifiedNetworkACL`. | `AllowOnlyForPrivateNetworks` | No |
-| 📝 `config.recursionAcl`                | Comma separated list of IPs/CIDRs to allow (use `!` to deny). | `""` | No |
-| 🕒 `config.logLocalTime`                | Use local time instead of UTC for logging. | `true` | No |
-| **Web UI & Security**                   | | | |
-| 👤 `config.adminPassword`               | Plain text password for the admin user (best set via Secret). | `""` | No |
-| 🔒 `config.webServiceEnableHttps`       | Enables HTTPS for the web management console. | `false` | No |
-| 📜 `config.webServiceUseSelfSignedCert` | Generates a self-signed TLS cert for the Web UI. | `false` | No |
-| 📂 `config.webServiceTlsCertificatePath`| Container path to a `.pfx` certificate file. | `/etc/dns/tls/cert.pfx`| No |
-| ↪️ `config.webServiceHttpToTlsRedirect` | Redirects HTTP Web UI traffic to HTTPS. | `false` | No |
-| **Port Toggles (Enabled Flags)**        | | | |
-| 🌐 `ports.webHttp`                      | Web UI (HTTP) on port `5380`. | `true` | No |
-| 🔐 `ports.webHttps`                     | Web UI (HTTPS) on port `53443`. | `false` | No |
-| 🚀 `ports.doq.enabled`                  | Enable DNS-over-QUIC (UDP) on port `853`. | `false` | No |
-| 🛡️ `ports.dot.enabled`                 | Enable DNS-over-TLS (TCP) on port `853`. | `false` | No |
-| 🔗 `ports.doh.enabled`                  | Enable DNS-over-HTTPS (TCP/UDP) on port `443`. | `false` | No |
-| 🌉 `ports.dohProxy.enabled`             | Enable DNS-over-HTTP (Proxy) on port `8053`. | `false` | No |
-| 🏠 `ports.dhcp.enabled`                 | Enable DHCP service on port `67`. | `false` | No |
-| **Infrastructure**                      | | | |
-| 🔌 `service.type`                       | K8s Service type (`LoadBalancer`, `ClusterIP`, `NodePort`). | `LoadBalancer` | No |
-| 🆔 `serviceAccount.create`              | Whether to create a dedicated Service Account. | `true` | No |
-| 💾 `persistence.size`                   | Size of the persistent volume for config and logs. | `2Gi` | No |
-| 💾 `persistence.storageClass`           | Storage class for the PVC. | `""` | No |
+| Parameter | Description | Default | Required |
+|:----------|:------------|:--------|:--------:|
+| **Image Settings** | | | |
+| image.repository | Container image repository. | `technitium/dns-server` | No |
+| image.tag | Container image tag (falls back to the chart `appVersion`). | `.Chart.AppVersion` | No |
+| image.pullPolicy | Kubernetes image pull policy. | `IfNotPresent` | No |
+| **Core DNS Configuration** | | | |
+| config.dnsDomain | Primary DNS domain the server identifies as. | `"dns-server"` | **YES** |
+| config.adminPassword | Plain-text admin password (leave empty to auto-generate). | `""` | No |
+| config.webServiceLocalAddresses | Comma-separated bind addresses for the web UI. | `""` | No |
+| config.webServiceEnableHttps | Enables HTTPS for the management UI. | `false` | No |
+| config.webServiceUseSelfSignedCert | Generates a self-signed cert for the UI when HTTPS is enabled. | `false` | No |
+| config.webServiceTlsCertificatePath | Path to the `.pfx` certificate inside the container. | `/etc/dns/tls/cert.pfx` | No |
+| config.webServiceTlsCertificatePassword | Password for the `.pfx` certificate. | `""` | No |
+| config.webServiceHttpToTlsRedirect | Forces HTTP → HTTPS redirects for the UI. | `false` | No |
+| config.optionalProtocolDnsOverHttp | Enables the DNS-over-HTTP helper protocol (port 8053). | `false` | No |
+| config.recursionDeniedNetworks | Comma-separated CIDRs denied for recursion. | `""` | No |
+| config.recursionAllowedNetworks | Comma-separated CIDRs allowed for recursion. | `""` | No |
+| config.allowTxtBlockingReport | Respond with TXT records explaining blocked domains. | `false` | No |
+| config.blockListUrls | Comma-separated block-list URLs. | `""` | No |
+| **Ports & Services** | | | |
+| ports.webHttp | HTTP port for the Web UI. | `5380` | No |
+| ports.webHttps | HTTPS port for the Web UI. | `53443` | No |
+| ports.doq.enabled | Enable DNS-over-QUIC (UDP/853). | `false` | No |
+| ports.dot.enabled | Enable DNS-over-TLS (TCP/853). | `false` | No |
+| ports.doh3.enabled | Enable DNS-over-HTTPS (UDP/443, HTTP/3). | `false` | No |
+| ports.doh.enabled | Enable DNS-over-HTTPS (TCP/443, HTTP/1.1 or 2). | `false` | No |
+| ports.dohHttpProxy.enabled | Enable DNS-over-HTTP proxy (TCP/80). | `false` | No |
+| ports.dohProxy.enabled | Enable DNS-over-HTTP proxy (TCP/8053). | `false` | No |
+| ports.dhcp.enabled | Enable DHCP server (UDP/67). | `false` | No |
+| **Platform Services** | | | |
+| serviceAccount.create | Create a dedicated ServiceAccount. | `true` | No |
+| ingress.enabled | Toggle for the bundled ingress template. | `false` | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
 
@@ -63,7 +69,7 @@ By default, this chart generates a random 16-character administrative password i
 To retrieve your generated password after deployment, run:
 
 ```bash
-kubectl get secret technitium-admin -o jsonpath="{.data.password}" | base64 --decode; echo
+kubectl get secret my-dns-admin -n technitium -o jsonpath="{.data.password}" | base64 --decode; echo
 ```
 
 ## 🌐 Ingress
