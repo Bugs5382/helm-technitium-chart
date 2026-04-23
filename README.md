@@ -17,11 +17,6 @@ helm install my-dns technitium
 
 The following table lists the configurable parameters of the Technitium chart and their default values.
 
-Here is your updated README configuration table. I've organized it into logical sections—**Core**, **Web/Security**, **Network/DNS**, and **Infrastructure**—to keep it readable as it grows.
-
-
-## ⚙️ Configuration
-
 The following table lists the configurable parameters of the Technitium chart and their default values.
 
 ### Configuration Parameters
