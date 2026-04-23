@@ -17,8 +17,6 @@ helm install my-dns technitium
 
 The following table lists the configurable parameters of the Technitium chart and their default values.
 
-The following table lists the configurable parameters of the Technitium chart and their default values.
-
 ### Configuration Parameters
 
 | Parameter | Description | Default | Required |
