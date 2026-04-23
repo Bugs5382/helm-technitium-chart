@@ -59,15 +59,15 @@ tasks:
     cmds:
       - task: golic-remove-run
         vars: { ARGS: '-d -t {{.TEMPLATE_LIC}} -c "{{.COMMON_LIC}}"' }
-  update-version:
-    desc: Updates the version variable in Taskfile.yml
+  update-helm-version:
+    desc: Updates the Helm chart version in Chart.yaml
     vars:
-      NEW_VERSION: '{{.NEW_VERSION |"local"}}'
+      NEW_VERSION: '{{ default "0.0.0-local" .NEW_VERSION }}'
     preconditions:
       - sh: command -v yq
         msg: "yq is not installed. Install it via 'brew install yq' or the GitHub Action."
     cmds:
-      - yq -i '.version = "{{.NEW_VERSION}}"' "{{.TASKFILE_DIR}}/technitium/Charts.yaml"
+      - yq -i '.version = "{{.NEW_VERSION}}"' "{{.TASKFILE_DIR}}/technitium/Chart.yaml"
   golic-inject-run:
     internal: true
     cmds:
