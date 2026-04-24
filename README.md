@@ -7,10 +7,12 @@ This Helm chart simplifies the deployment of **Technitium DNS Server** on Kubern
 To install the chart with the release name `my-dns`:
 
 ```bash
-helm install my-dns technitium
---set config.dnsDomain="dns-server"
---namespace technitium
---create-namespace
+kubectl create namespace technitium
+
+helm install technitium technitium \
+  --set config.dnsDomain="dns-server" \
+  --set persistence.storageClass="longhorn-static" \
+  --namespace technitium
 ```
 
 ## ⚙️ Configuration
