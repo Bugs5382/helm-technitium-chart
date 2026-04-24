@@ -39,6 +39,13 @@ The following table lists the configurable parameters of the Technitium chart an
 | config.recursionAllowedNetworks | Comma-separated CIDRs allowed for recursion. | `""` | No |
 | config.allowTxtBlockingReport | Respond with TXT records explaining blocked domains. | `false` | No |
 | config.blockListUrls | Comma-separated block-list URLs. | `""` | No |
+| config.preferIpv6 | Prefer IPv6 addresses when resolving names. | `""` | No |
+| config.recursion | Recursion behavior: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`, `UseSpecifiedNetworks`. | `""` | No |
+| config.recursionAcl | Comma-separated ACL rules controlling recursion. Example: `"allow 192.168.1.0/24, deny 0.0.0.0/0"`. | `""` | No |
+| config.enableBlocking | Enables the domain blocking feature. | `""` | No |
+| config.forwarders | Comma-separated upstream forwarder addresses. Example: `"1.1.1.1, 8.8.8.8"`. | `""` | No |
+| config.forwarderProtocol | Protocol for upstream forwarders: `Udp`, `Tcp`, `Tls`, `Https`, `HttpsJson`. | `""` | No |
+| config.logLocalTime | Log entries stamped with local server time instead of UTC. | `""` | No |
 | **Ports & Services** | | | |
 | ports.webHttp | HTTP port for the Web UI. | `5380` | No |
 | ports.webHttps | HTTPS port for the Web UI. | `53443` | No |
@@ -52,6 +59,16 @@ The following table lists the configurable parameters of the Technitium chart an
 | **Platform Services** | | | |
 | serviceAccount.create | Create a dedicated ServiceAccount. | `true` | No |
 | ingress.enabled | Toggle for the bundled ingress template. | `false` | No |
+| ingress.className | IngressClass name (e.g. `"nginx"`, `"traefik"`). | `""` | No |
+| ingress.annotations | Annotations to add to the ingress resource. | `{}` | No |
+| **Workload** | | | |
+| resources | Resource requests and limits for the container. | `{}` | No |
+| securityContext | Security context for the container. | `{}` | No |
+| **Persistence** | | | |
+| persistence.size | Size of the persistent volume claim. | `2Gi` | No |
+| persistence.storageClass | StorageClass for the PVC (empty = cluster default). | `""` | No |
+| persistence.accessModes | List of access modes for the PVC. | `[ReadWriteOnce]` | No |
+| persistence.existingClaim | Use a pre-existing PVC instead of creating one. | `""` | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
 

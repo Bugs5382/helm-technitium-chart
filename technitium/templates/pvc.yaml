@@ -28,7 +28,7 @@ metadata:
     {{- include "technitium.labels" . | nindent 4 }}
 spec:
   accessModes:
-    - {{ (index .Values "persistence" | default dict).accessMode | default "ReadWriteOnce" }}
+    {{- toYaml ((index .Values "persistence" | default dict).accessModes | default (list "ReadWriteOnce")) | nindent 4 }}
   resources:
     requests:
       storage:  {{ (index .Values "persistence" | default dict).size | default "2Gi" }}
