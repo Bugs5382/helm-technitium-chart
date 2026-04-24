@@ -1,11 +1,12 @@
 # Helm Technitium Chart
 
-## v0.1.0 - 2026-04-23
+## v0.1.0 - 2026-04-24
 
 ### What Changed 👀
 
 #### 🚀 Features
 
+- chore: cleanup and update config options @Bugs5382 (#17)
 - feat: added all env @Bugs5382 (#13)
 - ci: updated release-drafter version @Bugs5382 (#9)
 - ci: more fixes (#6) @Bugs5382 (#7)
