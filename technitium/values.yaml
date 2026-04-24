@@ -33,6 +33,16 @@ config:
   # Use this when placing the server behind a TLS-terminating reverse proxy.
   optionalProtocolDnsOverHttp: ""
 
+  # If true, prefer IPv6 addresses when resolving names.
+  preferIpv6: ""
+
+  # Controls recursion behavior. Options: "Allow", "Deny", "AllowOnlyForPrivateNetworks", "UseSpecifiedNetworks".
+  recursion: ""
+
+  # Comma-separated list of network ACL rules controlling which clients can use recursion.
+  # Example: "allow 192.168.1.0/24, deny 0.0.0.0/0"
+  recursionAcl: ""
+
   # Comma-separated list of IP ranges to explicitly DENY from using recursion.
   # Pro-tip: This is technically obsolete; recursionAcl (ACL) is the preferred modern method.
   recursionDeniedNetworks: ""
@@ -41,11 +51,23 @@ config:
   # Pro-tip: This is also technically obsolete in favor of recursionAcl.
   recursionAllowedNetworks: ""
 
+  # If true, enables the domain blocking feature.
+  enableBlocking: ""
+
   # If true, the server responds with a TXT record explaining why a domain was blocked.
   allowTxtBlockingReport: ""
 
-  # A comma-separated list of URLs for block lists (e.g., Ad-blocking or Malware lists).
+  # A comma-separated list of URLs for blocklists (e.g., Ad-blocking or Malware lists).
   blockListUrls: ""
+
+  # Comma-separated upstream forwarder addresses. Example: "1.1.1.1, 8.8.8.8"
+  forwarders: ""
+
+  # Protocol for upstream forwarders. Options: "Udp", "Tcp", "Tls", "Https", "HttpsJson".
+  forwarderProtocol: ""
+
+  # If true, log entries are stamped with local server time instead of UTC.
+  logLocalTime: ""
 
 image:
   # The Docker Hub repository for the Technitium DNS image.
@@ -93,6 +115,10 @@ serviceAccount:
 
 ingress:
   enabled: false
+  # IngressClass name for the ingress resource (e.g. "nginx", "traefik").
+  className: ""
+  # Annotations to add to the ingress resource.
+  annotations: {}
   hosts:
     - host: technitium.example.local
       paths:
@@ -106,4 +132,31 @@ ingress:
 
 service: {}
 
+# Resource requests and limits for the Technitium container.
+# Example:
+# resources:
+#   requests:
+#     cpu: 100m
+#     memory: 128Mi
+#   limits:
+#     cpu: 500m
+#     memory: 512Mi
+resources: {}
+
+# Security context for the Technitium container.
+# Note: Technitium binds to port 53, which may require elevated privileges on some clusters.
+# Example:
+# securityContext:
+#   allowPrivilegeEscalation: false
+#   readOnlyRootFilesystem: false
+securityContext: {}
+
+# Persistence configuration for the Technitium data volume.
+# Example:
+# persistence:
+#   size: 2Gi
+#   storageClass: ""
+#   accessModes:
+#     - ReadWriteOnce
+#   existingClaim: ""
 persistence: {}

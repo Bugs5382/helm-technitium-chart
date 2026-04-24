@@ -41,6 +41,10 @@ spec:
         - name: technitium-dns-server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - containerPort: {{ .Values.ports.webHttp | default 5380 }}
               name: web-ui-http
@@ -101,6 +105,10 @@ spec:
               port: dns-tcp
             initialDelaySeconds: 5
             periodSeconds: 10
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: DNS_SERVER_DOMAIN
               value: {{ required "A valid .Values.config.dnsDomain is required!" .Values.config.dnsDomain | quote }}
