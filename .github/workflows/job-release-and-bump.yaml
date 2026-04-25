@@ -127,17 +127,32 @@ jobs:
         with:
           version: v3.12.0
 
-      - name: Login to GHCR
-        uses: docker/login-action@v4.1.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package Chart
+        run: helm package technitium/ -d .cr-release-packages/
 
-      - name: Run Chart Releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        with:
-          charts_dir: .
-          config: "./.github/config/cr.yaml"
+      - name: Upload Chart to Release
+        run: gh release upload "${{ github.event.release.tag_name }}" .cr-release-packages/*.tgz
         env:
-          CR_TOKEN: "${{ steps.app-token.outputs.token }}"
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Install chart-releaser
+        run: |
+          cr_version="1.6.1"
+          arch=$(uname -m)
+          curl -sSL "https://github.com/helm/chart-releaser/releases/download/v${cr_version}/chart-releaser_${cr_version}_linux_${arch}.tar.gz" \
+            | tar xzf - cr
+          mv cr /usr/local/bin/cr
+
+      - name: Update Helm Repo Index
+        run: |
+          owner=$(cut -d '/' -f 1 <<< "$GITHUB_REPOSITORY")
+          repo=$(cut -d '/' -f 2 <<< "$GITHUB_REPOSITORY")
+          cr index \
+            --owner "$owner" \
+            --repo "$repo" \
+            --index-path ./index.yaml \
+            --package-path .cr-release-packages \
+            --config ./.github/config/cr.yaml \
+            --push
+        env:
+          CR_TOKEN: ${{ steps.app-token.outputs.token }}
