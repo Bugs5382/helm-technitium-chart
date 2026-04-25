@@ -148,10 +148,8 @@ jobs:
       - name: Update Helm Repo Index
         run: |
           owner=$(cut -d '/' -f 1 <<< "$GITHUB_REPOSITORY")
-          repo=$(cut -d '/' -f 2 <<< "$GITHUB_REPOSITORY")
           cr index \
             --owner "$owner" \
-            --repo "$repo" \
             --index-path ./index.yaml \
             --package-path .cr-release-packages \
             --config ./.github/config/cr.yaml \
