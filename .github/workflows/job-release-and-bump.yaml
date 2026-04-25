@@ -137,11 +137,13 @@ jobs:
 
       - name: Install chart-releaser
         run: |
-          cr_version="1.6.1"
-          arch=$(uname -m)
-          curl -sSL "https://github.com/helm/chart-releaser/releases/download/v${cr_version}/chart-releaser_${cr_version}_linux_${arch}.tar.gz" \
-            | tar xzf - cr
-          mv cr /usr/local/bin/cr
+          gh release download \
+            --repo helm/chart-releaser \
+            --pattern "*linux_amd64.tar.gz" \
+            -D /tmp
+          tar xzf /tmp/chart-releaser_*_linux_amd64.tar.gz -C /usr/local/bin cr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Update Helm Repo Index
         run: |
