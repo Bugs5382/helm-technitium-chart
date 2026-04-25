@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  technitium:
+  - apiVersion: v2
+    appVersion: 14.3.0
+    created: "2026-04-25T02:04:50.209427261Z"
+    description: Technitium DNS
+    digest: 9520e11ebe45d185fd82bc09a39361f03baeeb0c7791702f3851d5e57d4fcc63
+    icon: https://www.gravatar.com/avatar/5395c1eea64539b6ac2bf1b17d98dccd?s=120&r=g&d=404
+    name: technitium
+    type: application
+    urls:
+    - https://github.com/Bugs5382/helm-technitium-chart/releases/download/v0.1.0/technitium-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-04-25T02:04:50.209437099Z"
