@@ -109,9 +109,17 @@ jobs:
     timeout-minutes: 15
     needs: Lint_Testing
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.1.1
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
       - name: Install Helm
@@ -132,4 +140,4 @@ jobs:
           charts_dir: .
           config: "./.github/config/cr.yaml"
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_TOKEN: "${{ steps.app-token.outputs.token }}"

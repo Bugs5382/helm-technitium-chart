@@ -21,3 +21,5 @@
 index-path: "./index.yaml"
 
 generate-release-notes: false
+
+release-name-template: "v{{ .Version }}"
