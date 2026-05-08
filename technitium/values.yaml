@@ -130,7 +130,22 @@ ingress:
   #    hosts:
   #      -  admin.technitium.local
 
-service: {}
+# Services are split into two so that the web management UI can sit
+# behind an Ingress / reverse proxy with TLS while the DNS protocol
+# ports are exposed directly via a LoadBalancer (or NodePort, etc.).
+service:
+  # Service for the web management console and DoH HTTP proxy ports.
+  # Defaults to ClusterIP so it can be fronted by `ingress` with TLS.
+  web:
+    type: ClusterIP
+    annotations: {}
+  # Service for the DNS protocol ports (53, DoT, DoQ, direct DoH, DHCP).
+  # Defaults to LoadBalancer so DNS clients get a stable external IP.
+  dns:
+    type: LoadBalancer
+    annotations: {}
+    # Set to "Local" to preserve client source IPs (useful for ACLs).
+    externalTrafficPolicy: ""
 
 # Resource requests and limits for the Technitium container.
 # Example:
@@ -143,13 +158,31 @@ service: {}
 #     memory: 512Mi
 resources: {}
 
-# Security context for the Technitium container.
-# Note: Technitium binds to port 53, which may require elevated privileges on some clusters.
-# Example:
-# securityContext:
-#   allowPrivilegeEscalation: false
-#   readOnlyRootFilesystem: false
-securityContext: {}
+# Pod-level security context. Defaults satisfy the Kubernetes
+# "restricted" Pod Security Standard. Override with `{}` if your
+# Technitium image variant cannot run as a non-root user.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context for the Technitium container.
+# Defaults satisfy the "restricted" Pod Security Standard while still
+# allowing the server to bind to privileged port 53 via NET_BIND_SERVICE.
+# Override with `{}` if your image cannot run as non-root.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
 
 # Persistence configuration for the Technitium data volume.
 # Example:

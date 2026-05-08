@@ -55,7 +55,7 @@ spec:
             pathType: {{ .pathType | default "ImplementationSpecific" }}
             backend:
               service:
-                name: {{ include "technitium.fullname" $ }}
+                name: {{ include "technitium.fullname" $ }}-web
                 port:
                   number: {{ .port | default 5380 }}
           {{- end }}
