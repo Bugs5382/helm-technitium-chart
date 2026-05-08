@@ -29,6 +29,17 @@ on:
       - reopened
       - synchronize
       - ready_for_review
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   Lint_and_Test:
