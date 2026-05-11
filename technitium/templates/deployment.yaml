@@ -198,7 +198,11 @@ spec:
           volumeMounts:
             - name: config-storage
               mountPath: /etc/dns
+            - name: logs
+              mountPath: /var/log/technitium
       volumes:
         - name: config-storage
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.existingClaim | default (printf "%s-config-pvc" (include "technitium.fullname" .)) }}
+        - name: logs
+          emptyDir: {}
