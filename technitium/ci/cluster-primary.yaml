@@ -1,0 +1,38 @@
+---
+# Example values for the PRIMARY node of a two-release Technitium cluster.
+#
+# Install:
+#   helm install tech-a ./technitium \
+#     --namespace technitium-test --create-namespace \
+#     --values ./technitium/ci/cluster-primary.yaml
+#
+# Then install the secondary (see cluster-secondary.yaml). The primary must
+# exist first so its admin Secret is available for the secondary's hook Job.
+
+config:
+  # IMPORTANT (clustering): when this release will become a Technitium cluster
+  # node, set dnsDomain to the post-cluster node name — i.e. a subdomain of
+  # `cluster.domain` below. Technitium generates its self-signed HTTPS cert at
+  # first boot using this name as the CN, and the secondary nodes' heartbeat
+  # validates that CN. Use `cluster.local` here and the cluster comms will
+  # fail with RemoteCertificateNameMismatch.
+  dnsDomain: "tech-a.ns.example.local"
+
+persistence:
+  size: 1Gi
+
+# Defaults are fine for the DNS service in a single-node test cluster; flip
+# this to ClusterIP if you don't have LoadBalancer support (e.g. plain k0s
+# without MetalLB / kube-vip).
+service:
+  dns:
+    type: ClusterIP
+
+cluster:
+  enabled: true
+  domain: "ns.example.local"
+  # primaryReleaseName intentionally empty -> this release is the primary.
+  primaryReleaseName: ""
+  autoHttps: true
+  autoJoin: true
+  headless: true

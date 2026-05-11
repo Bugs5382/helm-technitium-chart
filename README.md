@@ -71,6 +71,17 @@ The following table lists the configurable parameters of the Technitium chart an
 | persistence.storageClass | StorageClass for the PVC (empty = cluster default). | `""` | No |
 | persistence.accessModes | List of access modes for the PVC. | `[ReadWriteOnce]` | No |
 | persistence.existingClaim | Use a pre-existing PVC instead of creating one. | `""` | No |
+| **Clustering** | | | |
+| cluster.enabled | Participate in a Technitium cluster (see Clustering section below). | `false` | No |
+| cluster.domain | Shared cluster zone name; must be identical on every node. | `""` | If `cluster.enabled` |
+| cluster.primaryReleaseName | Helm release name of the primary node (set this on secondaries; empty on the primary). | `""` | No |
+| cluster.autoHttps | Force HTTPS + self-signed cert (required by DANE-EE node-to-node TLS). | `true` | No |
+| cluster.autoJoin | Run a post-install Job that calls the cluster init/join API. | `true` | No |
+| cluster.adminUsername | Admin username used by the join Job to authenticate. | `"admin"` | No |
+| cluster.primaryNodeTotp | TOTP for the primary's admin user when 2FA is enabled. | `""` | No |
+| cluster.headless | Add a second, headless Service (`<release>-technitium-headless`) for direct peer traffic. | `false` | No |
+| cluster.jobImage.repository | Image used by the cluster-join Job (must include `curl`, non-root). | `curlimages/curl` | No |
+| cluster.jobImage.tag | Tag for the join-Job image. | `"8.10.1"` | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
 
@@ -83,6 +94,84 @@ To retrieve your generated password after deployment, run:
 ```bash
 kubectl get secret my-dns-admin -n technitium -o jsonpath="{.data.password}" | base64 --decode; echo
 ```
+
+## 🧩 Clustering
+
+Two (or more) Helm releases of this chart can join a single Technitium cluster — typically deployed side-by-side in the same namespace. Each release stays an independent Pod + PVC + Service; clustering simply lets them share settings, allow/block lists, DNS apps, users, permissions, and DNSSEC keys.
+
+### How it works
+
+- **Each release is a node.** Both releases live in the same namespace; resource names are prefixed with `{Release.Name}-technitium-…`, so there are no collisions.
+- **Web service over HTTPS.** Technitium clustering uses DANE-EE for node-to-node TLS, so the web service must be HTTPS and TLS cannot be terminated by a reverse proxy. Setting `cluster.enabled=true` flips on HTTPS with a self-signed certificate automatically.
+- **Stable peer IPs come from the ClusterIP Service.** The cluster zone holds A/TLSA records that point at each peer's ClusterIP — those IPs survive pod restarts. (Pod IPs would not. A headless service is available via `cluster.headless=true` for cases where you want it, but it's not used by the join automation.)
+- **Automated join via Helm hook.** With `cluster.autoJoin=true` (default), a post-install Job per release calls the Technitium HTTP API: `/api/admin/cluster/init` on the primary, `/api/admin/cluster/initJoin` on each secondary. The Job is idempotent — on re-runs it checks `/api/admin/cluster/state` and exits cleanly if the node is already in the cluster.
+
+### Install order
+
+The primary release **must** be installed first — secondaries' join Jobs read the primary's admin Secret via `secretKeyRef`. Installing a secondary first will leave its Job pod in `CreateContainerConfigError` until the primary's Secret exists.
+
+### `dnsDomain` must align with `cluster.domain`
+
+Technitium generates its self-signed HTTPS cert at first boot using `config.dnsDomain` as the certificate's Common Name. After clustering, peers fetch each other's cluster-state and connect to URLs like `https://<node>.<cluster.domain>:53443/`, and their heartbeats validate that exact name against the cert's CN. So every release in the cluster needs:
+
+```yaml
+config:
+  dnsDomain: "<node-shortname>.<cluster.domain>"
+cluster:
+  domain: "<cluster.domain>"
+```
+
+For example, with cluster domain `ns.example.local`, the primary uses `dnsDomain: tech-a.ns.example.local` and the secondary uses `dnsDomain: tech-b.ns.example.local`. Using a `dnsDomain` that isn't a subdomain of `cluster.domain` will produce `RemoteCertificateNameMismatch` heartbeat failures.
+
+### Example: two-release cluster in `technitium-test`
+
+The chart ships ready-to-use example values at `technitium/ci/cluster-primary.yaml` and `cluster-secondary.yaml`.
+
+```bash
+# 1. Primary
+helm install tech-a ./technitium \
+  --namespace technitium-test --create-namespace \
+  --values ./technitium/ci/cluster-primary.yaml
+
+# 2. Secondary (after the primary's Secret exists)
+helm install tech-b ./technitium \
+  --namespace technitium-test \
+  --values ./technitium/ci/cluster-secondary.yaml
+
+# 3. Watch the join Jobs
+kubectl -n technitium-test get jobs -l technitium.io/cluster-domain=ns-example-local
+kubectl -n technitium-test logs -l app.kubernetes.io/component=cluster-job --tail=200
+```
+
+After both Jobs report success, log into either web UI (`Administration → Cluster`) — both nodes should be listed, with one `Primary` and one `Secondary`.
+
+### Disabling automation
+
+If you'd rather initialize/join clustering by hand from the web UI, set `cluster.autoJoin=false` on both releases. The chart will still apply the discovery labels, enable HTTPS, and print join URLs + ClusterIP lookup commands in `NOTES.txt`.
+
+### Discovering cluster members
+
+Every cluster resource carries the `technitium.io/cluster-domain` and `technitium.io/cluster-role` labels:
+
+```bash
+kubectl -n technitium-test get all -l technitium.io/cluster-domain=ns-example-local
+```
+
+### Limits
+
+- DHCP service clustering is not supported by Technitium yet.
+- Each release is a single-replica `Deployment` with its own PVC — scaling beyond 1 replica per release is out of scope; clustering across multiple releases is the supported topology.
+
+### Known limitation: heartbeats fail against the default self-signed cert
+
+Technitium's cluster heartbeat path validates the peer's HTTPS certificate via standard PKIX, **not** via DANE-EE as the official clustering blog describes. The `ignoreCertificateErrors=true` flag passed to `/api/admin/cluster/initJoin` is honored only for the bootstrap join and is not persisted, so subsequent heartbeats fail with `UntrustedRoot` against the auto-generated self-signed cert that every node creates on first init. Verified against Technitium 15.1.0 *and* 15.2.0 (latest as of 2026-05-09): `ClusterNode.cs:196` hard-codes `ignoreCertificateErrors: false` in both releases.
+
+Symptom: `kubectl logs deploy/<release>-technitium` shows `Heartbeat failed for Primary node ... RemoteCertificateChainErrors: UntrustedRoot`, and the secondary's `/api/admin/cluster/state` reports the primary as `Unreachable` (asymmetric — the primary still reports the secondary as `Connected`).
+
+The chart's `cluster.autoJoin` Job will still complete successfully (joining works); it's the ongoing config-sync heartbeats that don't trust the peer's cert. Two workarounds:
+
+1. **Supply a trusted certificate.** Provision a PFX cert from a CA that both pods trust (e.g., a cert-manager-issued one whose root is in the system trust store), mount it into both pods, and set `config.webServiceEnableHttps=true` + `config.webServiceTlsCertificatePath` + `config.webServiceTlsCertificatePassword` so Technitium serves the trusted cert from boot. Then no self-signed fallback gets generated.
+2. **Wait for the upstream fix.** A detailed reproduction, root-cause analysis, and proposed patch live at [`docs/upstream-pr.md`](docs/upstream-pr.md) in this repo — ready to submit to [TechnitiumSoftware/DnsServer](https://github.com/TechnitiumSoftware/DnsServer).
 
 ## 🌐 Ingress
 

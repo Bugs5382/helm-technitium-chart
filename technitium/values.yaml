@@ -199,3 +199,70 @@ securityContext:
 #     - ReadWriteOnce
 #   existingClaim: ""
 persistence: {}
+
+# Technitium clustering. Lets two or more independent Helm releases (typically
+# in the same namespace) participate in a single Technitium cluster managed
+# from one admin web console. See README.md "Clustering" for the full workflow.
+#
+# Important: clustering is *initialized* and *joined* through the Technitium
+# web admin UI — this chart does not call the cluster API. Enabling this block
+# only (a) adds discovery labels, (b) auto-enables HTTPS with a self-signed
+# cert (DANE-EE requires TLS, and cannot be terminated at a reverse proxy),
+# and (c) prints join instructions in NOTES.txt.
+cluster:
+  # Toggle clustering mode for this release.
+  enabled: false
+
+  # Shared cluster zone name. Must be identical on every node in the cluster.
+  # The first node to be initialized will host this zone; secondaries discover
+  # peers through its A/AAAA/TLSA records. Example: "ns.example.local".
+  domain: ""
+
+  # When this release is the *secondary*, set this to the Helm release name of
+  # the primary node living in the same namespace. NOTES.txt will then print
+  # the primary's in-cluster web URL and ClusterIP lookup command so you can
+  # paste them into the "Join Cluster" wizard. Leave empty on the primary.
+  primaryReleaseName: ""
+
+  # When true (default while cluster.enabled), the chart forces HTTPS on the
+  # web service with a self-signed cert — required for DANE-EE node-to-node
+  # TLS. Set to false only if you are terminating TLS some other way (rare).
+  autoHttps: true
+
+  # When true, add a second, headless Service (`<fullname>-headless`) alongside
+  # the standard ClusterIP web Service. The headless service resolves to the
+  # pod IP, which is useful if you want to bypass kube-proxy for peer traffic.
+  # Note: with a single-replica Deployment, the pod IP changes on restart, so
+  # the headless DNS record will churn — the chart's API automation uses the
+  # stable ClusterIP, not the headless name. This is purely opt-in extra.
+  headless: false
+
+  # Automate cluster init/join via Technitium's HTTP admin API after install.
+  # - Primary release (cluster.primaryReleaseName is empty): runs a post-install
+  #   Job that calls /api/admin/cluster/init with the cluster domain and this
+  #   release's web ClusterIP.
+  # - Secondary release (cluster.primaryReleaseName is set): runs a post-install
+  #   Job that calls /api/admin/cluster/initJoin against this node, pointing at
+  #   the primary's URL/ClusterIP and using the primary's admin password (read
+  #   from the primary's `<primaryReleaseName>-technitium-admin` Secret in the
+  #   same namespace — that release must be installed first).
+  # Both Jobs are idempotent: they check /api/admin/cluster/state first and
+  # exit cleanly if the node is already clustered.
+  autoJoin: true
+
+  # Technitium admin username. The chart's secret holds the password under the
+  # `password` key; this is the matching username (Technitium's default is "admin").
+  adminUsername: "admin"
+
+  # Optional 6-digit TOTP code for the admin user when joining a cluster.
+  # Leave empty unless you've enabled 2FA on the primary's admin account.
+  primaryNodeTotp: ""
+
+  # Container image used by the post-install Job that calls the cluster API.
+  # Must include `curl` and run as a non-root user. `curlimages/curl` ships
+  # with curl preinstalled and runs as uid 100, which avoids any apk install
+  # step and is compatible with the "restricted" Pod Security Standard.
+  jobImage:
+    repository: curlimages/curl
+    tag: "8.10.1"
+    pullPolicy: IfNotPresent

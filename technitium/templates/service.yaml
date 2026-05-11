@@ -41,7 +41,7 @@ spec:
       port: {{ .Values.ports.webHttp | default 5380 }}
       targetPort: web-ui-http
       protocol: TCP
-    {{- if .Values.config.webServiceEnableHttps }}
+    {{- if eq (include "technitium.httpsEnabled" .) "true" }}
     - name: web-ui-https
       port: {{ .Values.ports.webHttps | default 53443 }}
       targetPort: web-ui-https
@@ -117,3 +117,30 @@ spec:
       targetPort: dhcp
       protocol: UDP
     {{- end }}
+{{- if and .Values.cluster.enabled .Values.cluster.headless }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "technitium.fullname" . }}-headless
+  labels:
+    {{- include "technitium.labels" . | nindent 4 }}
+    app.kubernetes.io/component: peer
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "technitium.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: web-ui-http
+      port: {{ .Values.ports.webHttp | default 5380 }}
+      targetPort: web-ui-http
+      protocol: TCP
+    {{- if eq (include "technitium.httpsEnabled" .) "true" }}
+    - name: web-ui-https
+      port: {{ .Values.ports.webHttps | default 53443 }}
+      targetPort: web-ui-https
+      protocol: TCP
+    {{- end }}
+{{- end }}

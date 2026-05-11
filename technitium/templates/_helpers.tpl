@@ -61,6 +61,10 @@ helm.sh/chart: {{ include "technitium.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- $cluster := include "technitium.clusterLabels" . | trim -}}
+{{- if $cluster }}
+{{ $cluster }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -69,6 +73,55 @@ Selector labels
 {{- define "technitium.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "technitium.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Cluster discovery labels. Emitted only when cluster.enabled is true so
+sibling releases can be listed with:
+  kubectl get pods -l technitium.io/cluster-domain=<domain>
+*/}}
+{{- define "technitium.clusterLabels" -}}
+{{- if .Values.cluster.enabled }}
+{{- $domain := required "cluster.domain is required when cluster.enabled" .Values.cluster.domain }}
+technitium.io/cluster-domain: {{ $domain | replace "." "-" | trunc 63 | trimSuffix "-" | quote }}
+technitium.io/cluster-role: {{ ternary "secondary" "primary" (ne (.Values.cluster.primaryReleaseName | toString) "") | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+Effective HTTPS toggle. Clustering needs DANE-EE TLS on the web service, so
+cluster.enabled + cluster.autoHttps implies HTTPS even if the user did not
+explicitly opt in via config.webServiceEnableHttps.
+*/}}
+{{- define "technitium.httpsEnabled" -}}
+{{- if or .Values.config.webServiceEnableHttps (and .Values.cluster.enabled .Values.cluster.autoHttps) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
+Effective self-signed cert toggle. Same reasoning as httpsEnabled.
+*/}}
+{{- define "technitium.selfSignedCertEnabled" -}}
+{{- if or .Values.config.webServiceUseSelfSignedCert (and .Values.cluster.enabled .Values.cluster.autoHttps) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
+In-cluster web URL for an arbitrary release name in this release's namespace.
+Usage:
+  {{ include "technitium.webUrl" (dict "root" . "release" "my-primary") }}
+*/}}
+{{- define "technitium.webUrl" -}}
+{{- $root := .root -}}
+{{- $name := default $root.Chart.Name $root.Values.nameOverride -}}
+{{- $full := printf "%s-%s" .release $name | trunc 63 | trimSuffix "-" -}}
+{{- if eq (include "technitium.httpsEnabled" $root) "true" -}}
+https://{{ $full }}-web.{{ $root.Release.Namespace }}.svc.cluster.local:{{ $root.Values.ports.webHttps | default 53443 }}
+{{- else -}}
+http://{{ $full }}-web.{{ $root.Release.Namespace }}.svc.cluster.local:{{ $root.Values.ports.webHttp | default 5380 }}
+{{- end -}}
 {{- end }}
 
 {{/*

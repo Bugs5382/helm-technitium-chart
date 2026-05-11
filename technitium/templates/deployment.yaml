@@ -53,7 +53,7 @@ spec:
             - containerPort: {{ .Values.ports.webHttp | default 5380 }}
               name: web-ui-http
               protocol: TCP
-            {{- if .Values.config.webServiceEnableHttps }}
+            {{- if eq (include "technitium.httpsEnabled" .) "true" }}
             - containerPort: {{ .Values.ports.webHttps | default 53443 }}
               name: web-ui-https
               protocol: TCP
@@ -131,17 +131,17 @@ spec:
             {{- end }}
             - name: DNS_SERVER_WEB_SERVICE_HTTP_PORT
               value: {{ .Values.ports.webHttp | default 5380 | quote }}
-            {{- if .Values.config.webServiceEnableHttps }}
+            {{- if eq (include "technitium.httpsEnabled" .) "true" }}
             - name: DNS_SERVER_WEB_SERVICE_HTTPS_PORT
               value: {{ .Values.ports.webHttps | default 53443 | quote }}
             - name: DNS_SERVER_WEB_SERVICE_ENABLE_HTTPS
-              value: {{ .Values.config.webServiceEnableHttps | quote }}
+              value: "true"
             - name: DNS_SERVER_WEB_SERVICE_TLS_CERTIFICATE_PATH
               value: {{ .Values.config.webServiceTlsCertificatePath | quote }}
             {{- end }}
-            {{- if .Values.config.webServiceUseSelfSignedCert }}
+            {{- if eq (include "technitium.selfSignedCertEnabled" .) "true" }}
             - name: DNS_SERVER_WEB_SERVICE_USE_SELF_SIGNED_CERT
-              value: {{ .Values.config.webServiceUseSelfSignedCert | quote }}
+              value: "true"
             {{- end }}
             {{- if .Values.config.webServiceTlsCertificatePassword }}
             - name: DNS_SERVER_WEB_SERVICE_TLS_CERTIFICATE_PASSWORD
