@@ -18,55 +18,8 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
-template: |
-  # What Changed 👀
-  
-  $CHANGES
-  
-  # Extra
-  
-  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
-categories:
-  - title: 🚀 Features
-    labels:
-      - enhancement
-  - title: 🐛 Bug Fixes
-    labels:
-      - bug
-  - title: ⚠️ Changes
-    labels:
-      - changed
-  - title: ⛔️ Deprecated
-    labels:
-      - deprecated
-  - title: 🗑 Removed
-    labels:
-      - removed
-  - title: 🔐 Security
-    labels:
-      - security
-  - title: 📄 Documentation
-    labels:
-      - documentation
-  - title: 🧩 Dependency Updates
-    labels:
-      - dependencies
-    collapse-after: 5
-change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
-change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
-version-resolver:
-  major:
-    labels:
-      - 'breaking'
-  minor:
-    labels:
-      - 'enhancement'
-  patch:
-    labels:
-      - 'fix'
-      - 'refactor'
-  default: patch
-exclude-labels:
-  - skip-changelog
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Technitium DNS Support Forum
+    url: https://github.com/TechnitiumSoftware/DnsServer/discussions
+    about: For questions about Technitium DNS Server itself (not this Helm chart).

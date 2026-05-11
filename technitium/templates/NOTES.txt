@@ -6,10 +6,69 @@
    kubectl get secret --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}-admin -o jsonpath="{.data.password}" | base64 --decode; echo
 
 2. 🌐 Access the Web UI:
-{{- if contains "LoadBalancer" (.Values.service.type | default "") }}
-   The service is type LoadBalancer. Get the external IP:
-   kubectl get svc --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}
+{{- if .Values.ingress.enabled }}
+   Ingress is enabled. Access the UI via the configured host(s):
+{{- range .Values.ingress.hosts }}
+     - http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else if eq (.Values.service.web.type | default "ClusterIP") "LoadBalancer" }}
+   The web service is type LoadBalancer. Get the external IP:
+   kubectl get svc --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}-web
 {{- else }}
-   Port-forward to access the UI at http://127.0.0.1:5380:
-   kubectl port-forward svc/{{ include "technitium.fullname" . }} 5380:5380
+   Port-forward to access the UI at http://127.0.0.1:{{ .Values.ports.webHttp | default 5380 }}:
+   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "technitium.fullname" . }}-web {{ .Values.ports.webHttp | default 5380 }}:{{ .Values.ports.webHttp | default 5380 }}
+{{- end }}
+
+3. 📡 DNS Endpoint:
+{{- if eq (.Values.service.dns.type | default "LoadBalancer") "LoadBalancer" }}
+   The DNS service is type LoadBalancer. Get its external IP:
+{{- else }}
+   The DNS service is type {{ .Values.service.dns.type }}. Inspect it with:
+{{- end }}
+   kubectl get svc --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}-dns
+
+{{- if .Values.cluster.enabled }}
+
+4. 🧩 Cluster Mode (zone: {{ .Values.cluster.domain }}):
+
+   This node's web ClusterIP:
+     kubectl get svc --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}-web -o jsonpath='{.spec.clusterIP}'; echo
+
+   List all sibling cluster members in the namespace:
+     kubectl get svc --namespace {{ .Release.Namespace }} -l technitium.io/cluster-domain={{ .Values.cluster.domain | replace "." "-" | trunc 63 | trimSuffix "-" }}
+
+{{- if .Values.cluster.autoJoin }}
+
+   The post-install Job `{{ include "technitium.fullname" . }}-cluster-join` will run the API
+   call to {{ if .Values.cluster.primaryReleaseName }}join the cluster as a secondary{{ else }}initialize the cluster{{ end }}.
+   Watch it with:
+     kubectl logs --namespace {{ .Release.Namespace }} job/{{ include "technitium.fullname" . }}-cluster-join -f
+
+   ⚠️  Known limitation (Technitium 15.1 and 15.2): post-join heartbeats fail
+   with `UntrustedRoot` against the auto-generated self-signed cert. Joining
+   works; ongoing config-sync does not. See README "Known limitation" section
+   and docs/upstream-pr.md for the fix proposal.
+
+{{- else }}
+{{- if .Values.cluster.primaryReleaseName }}
+
+   👉 This release is the SECONDARY. Primary release: {{ .Values.cluster.primaryReleaseName }}
+   Primary web ClusterIP (paste into the wizard's IP field):
+     kubectl get svc --namespace {{ .Release.Namespace }} {{ .Values.cluster.primaryReleaseName }}-{{ default .Chart.Name .Values.nameOverride }}-web -o jsonpath='{.spec.clusterIP}'; echo
+
+   Join steps:
+     a. Log into THIS node's web UI (see #2 above).
+     b. Administration → Cluster → Join Cluster.
+     c. Enter https://<primary-clusterip>:{{ .Values.ports.webHttps | default 53443 }}/ as the Primary URL,
+        the Primary ClusterIP, and the primary's admin password.
+{{- else }}
+
+   👉 This release is the PRIMARY. Initialize the cluster from its web UI:
+     a. Log into the web UI (see #2 above).
+     b. Administration → Cluster → Initialize New Cluster.
+     c. Cluster domain: {{ .Values.cluster.domain }}
+     d. Node IP: this node's web ClusterIP (see command above).
+     e. On each secondary release, follow the Join Cluster steps printed in its own NOTES.
+{{- end }}
+{{- end }}
 {{- end }}

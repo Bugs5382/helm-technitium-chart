@@ -18,55 +18,45 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
-template: |
-  # What Changed 👀
-  
-  $CHANGES
-  
-  # Extra
-  
-  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
-categories:
-  - title: 🚀 Features
-    labels:
-      - enhancement
-  - title: 🐛 Bug Fixes
-    labels:
-      - bug
-  - title: ⚠️ Changes
-    labels:
-      - changed
-  - title: ⛔️ Deprecated
-    labels:
-      - deprecated
-  - title: 🗑 Removed
-    labels:
-      - removed
-  - title: 🔐 Security
-    labels:
-      - security
-  - title: 📄 Documentation
-    labels:
-      - documentation
-  - title: 🧩 Dependency Updates
-    labels:
-      - dependencies
-    collapse-after: 5
-change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
-change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
-version-resolver:
-  major:
-    labels:
-      - 'breaking'
-  minor:
-    labels:
-      - 'enhancement'
-  patch:
-    labels:
-      - 'fix'
-      - 'refactor'
-  default: patch
-exclude-labels:
-  - skip-changelog
+name: 🚀 Feature Request
+description: Suggest an idea or enhancement for the Technitium Helm chart.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Please describe the feature you'd
+        like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem are you trying to solve? Is your feature request related to a pain point?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: How would you like this to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches you've considered.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, links, or any other context.
+    validations:
+      required: false

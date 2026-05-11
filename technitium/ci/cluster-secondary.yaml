@@ -1,0 +1,32 @@
+---
+# Example values for the SECONDARY node of a two-release Technitium cluster.
+#
+# Prereq: the PRIMARY release (e.g. `tech-a` using cluster-primary.yaml) must
+# already be installed in the same namespace — the secondary's hook Job reads
+# the primary's admin Secret to call /api/admin/cluster/initJoin.
+#
+# Install:
+#   helm install tech-b ./technitium \
+#     --namespace technitium-test \
+#     --values ./technitium/ci/cluster-secondary.yaml
+
+config:
+  # IMPORTANT: same rule as the primary — set dnsDomain to a subdomain of
+  # `cluster.domain` so the self-signed HTTPS cert's CN matches the post-join
+  # cluster-node name (heartbeat does PKIX validation against this CN).
+  dnsDomain: "tech-b.ns.example.local"
+
+persistence:
+  size: 1Gi
+
+service:
+  dns:
+    type: ClusterIP
+
+cluster:
+  enabled: true
+  domain: "ns.example.local"          # MUST match the primary's cluster.domain
+  primaryReleaseName: "tech-a"        # Helm release name of the primary
+  autoHttps: true
+  autoJoin: true
+  headless: true
