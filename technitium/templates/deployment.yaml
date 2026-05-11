@@ -107,8 +107,8 @@ spec:
           readinessProbe:
             tcpSocket:
               port: dns-tcp
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 2
+            periodSeconds: 2
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
