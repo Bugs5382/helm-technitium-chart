@@ -255,15 +255,5 @@ the option to add DANE-EE later. Happy to revise this PR — or split into
   the `ignoreCertificateErrors` constructor parameter exercised by the
   initJoin path.
 
-## Helm-chart context (for reviewers who are curious)
 
-This bug surfaced while building a community Helm chart that runs two
-independent Helm releases of Technitium DNS in the same Kubernetes
-namespace and clusters them automatically via the existing API (chart:
-[helm-technitium-chart](https://github.com/Bugs5382/helm-technitium-chart)).
-The chart's `cluster` block toggles a post-install Job that calls
-`initJoin` with `ignoreCertificateErrors=true`. Without the proposed
-fix, the join itself works, but heartbeats fail forever afterwards and
-the cluster never becomes functional for config sync. The chart's
-README documents this for users who don't want to wait for an upstream
-fix; we'd rather close that footnote out.
+Upstream PR located [here](https://github.com/TechnitiumSoftware/DnsServer/pull/1921).
