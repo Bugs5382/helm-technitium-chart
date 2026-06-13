@@ -77,6 +77,23 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   # tag: ""
 
+# Deployment update strategy.
+#
+# Technitium keeps its config and zone data on a single ReadWriteOnce PVC, which
+# Kubernetes will not mount on two pods at once. With the default RollingUpdate,
+# Kubernetes tries to start the new pod before the old one releases the volume,
+# so the rollout deadlocks (new pod stuck Pending). Recreate terminates the old
+# pod first, then starts the new one -- a brief DNS outage during the swap, but
+# no deadlock. This is the only safe single-replica option on a ReadWriteOnce
+# volume.
+#
+# For zero-downtime updates, run Technitium in cluster mode (see `cluster`
+# below): multiple instances, each with its own volume and external IP, where a
+# secondary syncs zones from the primary. Clients always have a live resolver, so
+# replicas can be rolled one at a time -- set `type: RollingUpdate` there.
+updateStrategy:
+  type: Recreate
+
 ports:
   # Port for the DNS web management console (HTTP).
   webHttp: 5380
@@ -130,7 +147,22 @@ ingress:
   #    hosts:
   #      -  admin.technitium.local
 
-service: {}
+# Services are split into two so that the web management UI can sit
+# behind an Ingress / reverse proxy with TLS while the DNS protocol
+# ports are exposed directly via a LoadBalancer (or NodePort, etc.).
+service:
+  # Service for the web management console and DoH HTTP proxy ports.
+  # Defaults to ClusterIP so it can be fronted by `ingress` with TLS.
+  web:
+    type: ClusterIP
+    annotations: {}
+  # Service for the DNS protocol ports (53, DoT, DoQ, direct DoH, DHCP).
+  # Defaults to LoadBalancer so DNS clients get a stable external IP.
+  dns:
+    type: LoadBalancer
+    annotations: {}
+    # Set to "Local" to preserve client source IPs (useful for ACLs).
+    externalTrafficPolicy: ""
 
 # Resource requests and limits for the Technitium container.
 # Example:
@@ -143,13 +175,37 @@ service: {}
 #     memory: 512Mi
 resources: {}
 
-# Security context for the Technitium container.
-# Note: Technitium binds to port 53, which may require elevated privileges on some clusters.
-# Example:
-# securityContext:
-#   allowPrivilegeEscalation: false
-#   readOnlyRootFilesystem: false
-securityContext: {}
+# Pod-level security context. Defaults satisfy the Kubernetes
+# "restricted" Pod Security Standard. Override with `{}` if your
+# Technitium image variant cannot run as a non-root user.
+# The `ip_unprivileged_port_start` sysctl lets uid 1000 bind port 53
+# directly — dotnet does not reliably honor an ambient NET_BIND_SERVICE
+# capability when allowPrivilegeEscalation is false.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+  sysctls:
+    - name: net.ipv4.ip_unprivileged_port_start
+      value: "53"
+
+# Container-level security context for the Technitium container.
+# Defaults satisfy the "restricted" Pod Security Standard while still
+# allowing the server to bind to privileged port 53 via NET_BIND_SERVICE.
+# Override with `{}` if your image cannot run as non-root.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
 
 # Persistence configuration for the Technitium data volume.
 # Example:
@@ -160,3 +216,62 @@ securityContext: {}
 #     - ReadWriteOnce
 #   existingClaim: ""
 persistence: {}
+
+# Technitium clustering. Lets two or more independent Helm releases (typically
+# in the same namespace) participate in a single Technitium cluster managed
+# from one admin web console. See README.md "Clustering" for the full workflow.
+#
+# Important: clustering is *initialized* and *joined* through the Technitium
+# web admin UI — this chart does not call the cluster API. Enabling this block
+# only (a) adds discovery labels, (b) auto-enables HTTPS with a self-signed
+# cert (DANE-EE requires TLS, and cannot be terminated at a reverse proxy),
+# and (c) prints join instructions in NOTES.txt.
+cluster:
+  # Toggle clustering mode for this release.
+  enabled: false
+
+  # Shared cluster zone name. Must be identical on every node in the cluster.
+  # The first node to be initialized will host this zone; secondaries discover
+  # peers through its A/AAAA/TLSA records. Example: "ns.example.local".
+  domain: ""
+
+  # When this release is the *secondary*, set this to the Helm release name of
+  # the primary node living in the same namespace. NOTES.txt will then print
+  # the primary's in-cluster web URL and ClusterIP lookup command so you can
+  # paste them into the "Join Cluster" wizard. Leave empty on the primary.
+  primaryReleaseName: ""
+
+  # When true (default while cluster.enabled), the chart forces HTTPS on the
+  # web service with a self-signed cert — required for DANE-EE node-to-node
+  # TLS. Set to false only if you are terminating TLS some other way (rare).
+  autoHttps: true
+
+  # Automate cluster init/join via Technitium's HTTP admin API after install.
+  # - Primary release (cluster.primaryReleaseName is empty): runs a post-install
+  #   Job that calls /api/admin/cluster/init with the cluster domain and this
+  #   release's web ClusterIP.
+  # - Secondary release (cluster.primaryReleaseName is set): runs a post-install
+  #   Job that calls /api/admin/cluster/initJoin against this node, pointing at
+  #   the primary's URL/ClusterIP and using the primary's admin password (read
+  #   from the primary's `<primaryReleaseName>-technitium-admin` Secret in the
+  #   same namespace — that release must be installed first).
+  # Both Jobs are idempotent: they check /api/admin/cluster/state first and
+  # exit cleanly if the node is already clustered.
+  autoJoin: true
+
+  # Technitium admin username. The chart's secret holds the password under the
+  # `password` key; this is the matching username (Technitium's default is "admin").
+  adminUsername: "admin"
+
+  # Optional 6-digit TOTP code for the admin user when joining a cluster.
+  # Leave empty unless you've enabled 2FA on the primary's admin account.
+  primaryNodeTotp: ""
+
+  # Container image used by the post-install Job that calls the cluster API.
+  # Must include `curl` and run as a non-root user. `curlimages/curl` ships
+  # with curl preinstalled and runs as uid 100, which avoids any apk install
+  # step and is compatible with the "restricted" Pod Security Standard.
+  jobImage:
+    repository: curlimages/curl
+    tag: "8.10.1"
+    pullPolicy: IfNotPresent

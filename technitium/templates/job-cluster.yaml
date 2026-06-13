@@ -1,0 +1,294 @@
+{{/*
+MIT License
+
+Copyright (c) 2026 Shane & Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/}}
+{{- if and .Values.cluster.enabled .Values.cluster.autoJoin -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- $isSecondary := ne (.Values.cluster.primaryReleaseName | toString) "" -}}
+{{- $primaryFull := "" -}}
+{{- if $isSecondary -}}
+{{- $primaryFull = printf "%s-%s" .Values.cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{/*
+  We register each release's *real* pod IP (not its Service ClusterIP) with
+  Technitium at join time, because Kubernetes doesn't NAT outbound pod
+  traffic to the ClusterIP — the source IP on AXFR/heartbeat connections is
+  the pod IP. If the catalog zone allow-list contains a ClusterIP that
+  never matches what's on the wire, sync fails. Pod IPs are resolved at
+  runtime via the Kubernetes Endpoints API (RBAC in templates/rbac.yaml).
+*/}}
+{{/*
+  Install order note: when this is a secondary release, the primary release
+  (cluster.primaryReleaseName) must be installed first so its admin Secret
+  ({primary}-technitium-admin) exists. Otherwise the Job pod will sit in
+  CreateContainerConfigError until the Secret appears. We don't use a Helm
+  `lookup`-based fail here because `helm template`/`--dry-run` would trip it
+  even when the live cluster has the Secret.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "technitium.fullname" . }}-cluster-join
+  labels:
+    {{- include "technitium.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster-job
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    # `before-hook-creation` so re-installs/upgrades start clean; we intentionally
+    # do NOT use `hook-succeeded` so the Pod (and its logs) stick around for
+    # post-mortem inspection — Technitium's API replies HTTP 200 even on errors,
+    # so success here means we both got 2xx and parsed `"status":"ok"`.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "technitium.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cluster-job
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "technitium.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cluster-join
+          image: "{{ .Values.cluster.jobImage.repository }}:{{ .Values.cluster.jobImage.tag }}"
+          imagePullPolicy: {{ .Values.cluster.jobImage.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 100
+          env:
+            - name: ROLE
+              value: {{ ternary "secondary" "primary" $isSecondary | quote }}
+            - name: CLUSTER_DOMAIN
+              value: {{ required "cluster.domain is required when cluster.enabled" .Values.cluster.domain | quote }}
+            - name: ADMIN_USER
+              value: {{ .Values.cluster.adminUsername | default "admin" | quote }}
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_SVC_NAME
+              value: "{{ include "technitium.fullname" . }}-web"
+            - name: MY_HTTP_PORT
+              value: "{{ .Values.ports.webHttp | default 5380 }}"
+            - name: MY_HTTPS_PORT
+              value: "{{ .Values.ports.webHttps | default 53443 }}"
+            - name: MY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "technitium.fullname" . }}-admin
+                  key: password
+            {{- if $isSecondary }}
+            - name: PRIMARY_SVC_NAME
+              value: "{{ $primaryFull }}-web"
+            - name: PRIMARY_HTTPS_PORT
+              value: "{{ .Values.ports.webHttps | default 53443 }}"
+            - name: PRIMARY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-admin" $primaryFull | quote }}
+                  key: password
+            - name: PRIMARY_TOTP
+              value: {{ .Values.cluster.primaryNodeTotp | quote }}
+            {{- end }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+
+              die() { echo "ERROR: $*" >&2; exit 1; }
+
+              # Pod IP discovery via the Kubernetes Endpoints API. We use the
+              # pod IP (not the Service ClusterIP) because Kubernetes doesn't
+              # NAT outbound pod traffic to the ClusterIP — so the source IP
+              # on Technitium's heartbeat / AXFR connections IS the pod IP,
+              # and that's what must be registered in the cluster zone for
+              # the catalog-zone allow-list to match.
+              KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+              get_pod_ip() {
+                svc="$1"
+                tries=0
+                while [ $tries -lt 60 ]; do
+                  ip=$(curl -sS --cacert "$KUBE_CA" \
+                    -H "Authorization: Bearer ${KUBE_TOKEN}" --max-time 5 \
+                    "https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/endpoints/${svc}" \
+                    | sed -n 's/.*"ip":"\([0-9.]*\)".*/\1/p' | head -n1)
+                  if [ -n "$ip" ]; then
+                    printf '%s' "$ip"; return 0
+                  fi
+                  tries=$((tries+1)); sleep 2
+                done
+                return 1
+              }
+
+              MY_IP="$(get_pod_ip "$MY_SVC_NAME")" \
+                || die "could not resolve pod IP for endpoints/$MY_SVC_NAME via K8s API"
+
+              MY_BASE_HTTPS="https://${MY_IP}:${MY_HTTPS_PORT}"
+              MY_BASE_HTTP="http://${MY_IP}:${MY_HTTP_PORT}"
+
+              # Probe: HTTPS first (post-init Technitium auto-enables HTTPS); fall
+              # back to HTTP for the very first init pass before HTTPS is up.
+              wait_self() {
+                tries=0
+                while [ $tries -lt 120 ]; do
+                  if curl -fsSk -o /dev/null --max-time 3 "${MY_BASE_HTTPS}/api/user/session/get"; then
+                    SELF_BASE="$MY_BASE_HTTPS"; SELF_TLS_FLAG="-k"; return 0
+                  fi
+                  if curl -fsS -o /dev/null --max-time 3 "${MY_BASE_HTTP}/api/user/session/get"; then
+                    SELF_BASE="$MY_BASE_HTTP"; SELF_TLS_FLAG=""; return 0
+                  fi
+                  tries=$((tries+1)); sleep 3
+                done
+                die "timed out waiting for own DNS server at $MY_IP"
+              }
+
+              # Extract a top-level JSON string field. Good enough for token + state.
+              json_str() { sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p" | head -n1; }
+              json_bool() { grep -o "\"$1\":[a-z]*" | head -n1 | cut -d: -f2; }
+
+              # Try to log in; print the token on success, nothing on failure.
+              # Don't die — caller decides whether to retry with another password.
+              try_login() {
+                base="$1"; pass="$2"; tls="$3"
+                resp="$(curl -sS $tls --max-time 10 -X POST "${base}/api/user/login" \
+                  --data-urlencode "user=${ADMIN_USER}" \
+                  --data-urlencode "pass=${pass}" \
+                  --data-urlencode "includeInfo=false" 2>/dev/null)" || return 1
+                tok="$(printf '%s' "$resp" | json_str token)"
+                [ -n "$tok" ] || return 1
+                printf '%s' "$tok"
+              }
+
+              cluster_state() {
+                base="$1"; tok="$2"; tls="$3"
+                curl -fsS $tls --max-time 10 -H "Authorization: Bearer ${tok}" \
+                  "${base}/api/admin/cluster/state"
+              }
+
+              echo "==> waiting for own DNS server (ip=$MY_IP)..."
+              wait_self
+              echo "==> own server reachable at $SELF_BASE"
+
+              # Login to self. First try our own K8s-secret password. On a
+              # secondary that has already partially or fully joined a cluster,
+              # the primary's admin password will have replaced ours, so fall
+              # back to that. This makes the Job idempotent across re-runs.
+              SELF_TOKEN="$(try_login "$SELF_BASE" "$MY_ADMIN_PASSWORD" "$SELF_TLS_FLAG" || true)"
+              if [ -z "${SELF_TOKEN:-}" ] && [ "$ROLE" = "secondary" ]; then
+                echo "==> own-secret login failed; trying primary's password (post-join state)"
+                SELF_TOKEN="$(try_login "$SELF_BASE" "$PRIMARY_ADMIN_PASSWORD" "$SELF_TLS_FLAG" || true)"
+              fi
+              [ -n "${SELF_TOKEN:-}" ] || die "could not log in to self at $SELF_BASE — neither own password nor primary password was accepted"
+
+              SELF_STATE="$(cluster_state "$SELF_BASE" "$SELF_TOKEN" "$SELF_TLS_FLAG")"
+              SELF_INIT="$(printf '%s' "$SELF_STATE" | json_bool clusterInitialized)"
+              if [ "$SELF_INIT" = "true" ]; then
+                echo "==> this node is already in a cluster; nothing to do"
+                exit 0
+              fi
+
+              # Technitium API returns HTTP 200 even on errors and signals the
+              # actual outcome in the body's `"status"` field. So we capture the
+              # body and assert `"status":"ok"` ourselves.
+              api_status() { grep -o '"status":"[^"]*"' | head -n1 | cut -d'"' -f4; }
+
+              if [ "$ROLE" = "primary" ]; then
+                echo "==> initializing cluster '${CLUSTER_DOMAIN}' with primary IP ${MY_IP}"
+                resp="$(curl -sS $SELF_TLS_FLAG --max-time 60 -X POST \
+                  -H "Authorization: Bearer ${SELF_TOKEN}" \
+                  --data-urlencode "clusterDomain=${CLUSTER_DOMAIN}" \
+                  --data-urlencode "primaryNodeIpAddresses=${MY_IP}" \
+                  "${SELF_BASE}/api/admin/cluster/init")" \
+                  || die "cluster/init transport error"
+                st="$(printf '%s' "$resp" | api_status)"
+                if [ "$st" != "ok" ]; then
+                  echo "$resp" >&2
+                  die "cluster/init returned status='$st'"
+                fi
+                echo "==> primary initialized: $resp"
+                exit 0
+              fi
+
+              # === secondary path ===
+              PRIMARY_IP="$(get_pod_ip "$PRIMARY_SVC_NAME")" \
+                || die "could not resolve pod IP for endpoints/$PRIMARY_SVC_NAME via K8s API — is the primary release installed and ready?"
+              PRIMARY_BASE="https://${PRIMARY_IP}:${PRIMARY_HTTPS_PORT}"
+
+              echo "==> waiting for primary cluster to be initialized at $PRIMARY_BASE..."
+              # We also need the primary's *cluster-node URL* (a domain-name URL
+              # like https://tech-a.ns.example.local:53443/) for initJoin —
+              # Technitium rejects raw-IP URLs. The primary publishes that URL
+              # in its own cluster-state response, so we grab it from there.
+              PRIMARY_NODE_URL=""
+              tries=0
+              while [ $tries -lt 120 ]; do
+                if PT="$(curl -fsSk --max-time 5 -X POST "${PRIMARY_BASE}/api/user/login" \
+                       --data-urlencode "user=${ADMIN_USER}" \
+                       --data-urlencode "pass=${PRIMARY_ADMIN_PASSWORD}" \
+                       --data-urlencode "includeInfo=false" 2>/dev/null | json_str token)" \
+                   && [ -n "$PT" ]; then
+                  ps="$(cluster_state "$PRIMARY_BASE" "$PT" "-k" 2>/dev/null || true)"
+                  if [ "$(printf '%s' "$ps" | json_bool clusterInitialized)" = "true" ]; then
+                    PRIMARY_NODE_URL="$(printf '%s' "$ps" | json_str url)"
+                    [ -n "$PRIMARY_NODE_URL" ] || die "primary is initialized but its cluster-state did not include a node URL"
+                    echo "==> primary is initialized; advertised URL: $PRIMARY_NODE_URL"
+                    break
+                  fi
+                fi
+                tries=$((tries+1)); sleep 5
+              done
+              [ $tries -lt 120 ] || die "timed out waiting for primary cluster init"
+
+              echo "==> joining cluster as secondary (self=${MY_IP}, primary=${PRIMARY_IP} via ${PRIMARY_NODE_URL})"
+              resp="$(curl -sS $SELF_TLS_FLAG --max-time 120 -X POST \
+                -H "Authorization: Bearer ${SELF_TOKEN}" \
+                --data-urlencode "secondaryNodeIpAddresses=${MY_IP}" \
+                --data-urlencode "primaryNodeUrl=${PRIMARY_NODE_URL}" \
+                --data-urlencode "primaryNodeIpAddress=${PRIMARY_IP}" \
+                --data-urlencode "ignoreCertificateErrors=true" \
+                --data-urlencode "primaryNodeUsername=${ADMIN_USER}" \
+                --data-urlencode "primaryNodePassword=${PRIMARY_ADMIN_PASSWORD}" \
+                --data-urlencode "primaryNodeTotp=${PRIMARY_TOTP}" \
+                "${SELF_BASE}/api/admin/cluster/initJoin")" \
+                || die "cluster/initJoin transport error"
+              st="$(printf '%s' "$resp" | api_status)"
+              if [ "$st" != "ok" ]; then
+                echo "$resp" >&2
+                die "cluster/initJoin returned status='$st'"
+              fi
+              echo "==> secondary joined cluster '${CLUSTER_DOMAIN}': $resp"
+{{- end }}

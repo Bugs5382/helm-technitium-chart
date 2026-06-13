@@ -18,30 +18,8 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name: YamlLint
-on:
-  push:
-    paths-ignore:
-      - '**.md'
-  pull_request:
-    branches:
-      - main
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
-jobs:
-  lint:
-    name: YamlLint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-
-      - name: YamlLint
-        run: yamllint .
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Technitium DNS Support Forum
+    url: https://github.com/TechnitiumSoftware/DnsServer/discussions
+    about: For questions about Technitium DNS Server itself (not this Helm chart).

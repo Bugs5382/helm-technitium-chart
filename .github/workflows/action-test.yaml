@@ -29,6 +29,17 @@ on:
       - reopened
       - synchronize
       - ready_for_review
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   Lint_and_Test:
@@ -50,15 +61,12 @@ jobs:
         run: helm lint technitium
 
       - name: Create kind cluster
-        if: github.event.pull_request.draft == false
         uses: helm/kind-action@v1.10.0
 
       - name: Dry Run Install
-        if: github.event.pull_request.draft == false
         run: helm install technitium-test-release technitium/ --dry-run --debug
 
       - name: Install Chart
-        if: github.event.pull_request.draft == false
         run: |
           helm install technitium-test-release technitium/ --set config.dnsDomain="dns-server"
           # Wait up to 3 minutes for the deployment to be successful
