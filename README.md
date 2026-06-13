@@ -211,7 +211,7 @@ A huge thank you to the [Technitium](https://technitium.com/) team for building 
 
 ### ❤️ Personal Thanks
 
-Building and maintaining open-source tools takes time and focus. I want to give a special thanks to **my wife, my daughter, and my son**. Your support and patience allow me the space to be a "geek" and contribute back to the community. You are my greatest motivation\!
+Building and maintaining open-source tools takes time and focus. I want to give a special thanks to **my wife, my daughter, and my baby boy**. Your support and patience allow me the space to be a "geek" and contribute back to the community. You are my greatest motivation\!
 
 ## ⚖️ Disclaimers & Licensing
 
