@@ -43,11 +43,12 @@ concurrency:
 
 jobs:
   Lint_and_Test:
+    name: 🧪 Lint & Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

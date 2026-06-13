@@ -18,21 +18,25 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name: Delete old workflow runs
+name: Gitleaks
+# Secret scan on EVERY push and PR -- no paths-ignore, because a secret can land
+# in any file, docs included. Hard failure: the action exits non-zero on a finding.
 on:
-  schedule:
-    - cron: "0 0 1 * *"  # Monthly at 00:00 on the 1st
+  push:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
 jobs:
-  Cleanup:
+  gitleaks:
+    name: 🔒 Gitleaks (secret scan)
     runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
     steps:
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@v2.1.0
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 30
-          keep_minimum_runs: 6
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
