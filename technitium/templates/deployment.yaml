@@ -28,6 +28,11 @@ metadata:
     {{- include "technitium.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # Recreate by default: the config/zone data lives on a single ReadWriteOnce PVC
+  # that cannot be mounted by two pods at once, so a RollingUpdate would deadlock.
+  # See `updateStrategy` in values.yaml. For zero-downtime updates use cluster mode.
+  strategy:
+    {{- toYaml (.Values.updateStrategy | default (dict "type" "Recreate")) | nindent 4 }}
   selector:
     matchLabels:
       {{- include "technitium.selectorLabels" . | nindent 6 }}

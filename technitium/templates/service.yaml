@@ -59,6 +59,23 @@ spec:
       targetPort: doh-proxy
       protocol: TCP
     {{- end }}
+    {{- if .Values.cluster.enabled }}
+    # Cluster mode: peer nodes send DNS NOTIFY / AXFR / IXFR to the same IP
+    # they use for the HTTPS admin API (the IP registered at join time —
+    # this Service's ClusterIP). Port 53 needs to answer here too, otherwise
+    # NOTIFY is dropped on the floor. Note: opening the port is necessary
+    # but not sufficient — outbound AXFR from a pod is sourced from the pod
+    # IP, not the ClusterIP, so the catalog zone's allow-list still rejects
+    # it. See README "Known limitation" for the full story.
+    - name: dns-udp
+      port: 53
+      targetPort: dns-udp
+      protocol: UDP
+    - name: dns-tcp
+      port: 53
+      targetPort: dns-tcp
+      protocol: TCP
+    {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -117,30 +134,3 @@ spec:
       targetPort: dhcp
       protocol: UDP
     {{- end }}
-{{- if and .Values.cluster.enabled .Values.cluster.headless }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "technitium.fullname" . }}-headless
-  labels:
-    {{- include "technitium.labels" . | nindent 4 }}
-    app.kubernetes.io/component: peer
-spec:
-  type: ClusterIP
-  clusterIP: None
-  publishNotReadyAddresses: true
-  selector:
-    {{- include "technitium.selectorLabels" . | nindent 4 }}
-  ports:
-    - name: web-ui-http
-      port: {{ .Values.ports.webHttp | default 5380 }}
-      targetPort: web-ui-http
-      protocol: TCP
-    {{- if eq (include "technitium.httpsEnabled" .) "true" }}
-    - name: web-ui-https
-      port: {{ .Values.ports.webHttps | default 53443 }}
-      targetPort: web-ui-https
-      protocol: TCP
-    {{- end }}
-{{- end }}

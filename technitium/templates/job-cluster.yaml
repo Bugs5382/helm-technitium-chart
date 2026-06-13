@@ -28,17 +28,13 @@ OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 {{- $primaryFull = printf "%s-%s" .Values.cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{/*
-  The kubelet auto-injects a `<SVC_NAME_UPPER_UNDERSCORED>_SERVICE_HOST` env
-  var into every pod for every Service in the namespace that exists at pod
-  creation time. We use those instead of DNS for ClusterIP lookup so the Job
-  doesn't depend on the cluster's DNS suffix (which is `cluster.local` on
-  vanilla k8s but customizable — e.g. k0s users sometimes set `kube.<corp>`).
+  We register each release's *real* pod IP (not its Service ClusterIP) with
+  Technitium at join time, because Kubernetes doesn't NAT outbound pod
+  traffic to the ClusterIP — the source IP on AXFR/heartbeat connections is
+  the pod IP. If the catalog zone allow-list contains a ClusterIP that
+  never matches what's on the wire, sync fails. Pod IPs are resolved at
+  runtime via the Kubernetes Endpoints API (RBAC in templates/rbac.yaml).
 */}}
-{{- $svcEnv := printf "%s_WEB_SERVICE_HOST" (include "technitium.fullname" . | upper | replace "-" "_") -}}
-{{- $primarySvcEnv := "" -}}
-{{- if $isSecondary -}}
-{{- $primarySvcEnv = printf "%s_WEB_SERVICE_HOST" ($primaryFull | upper | replace "-" "_") -}}
-{{- end -}}
 {{/*
   Install order note: when this is a secondary release, the primary release
   (cluster.primaryReleaseName) must be installed first so its admin Secret
@@ -72,6 +68,7 @@ spec:
         app.kubernetes.io/component: cluster-job
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: {{ include "technitium.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
@@ -97,8 +94,12 @@ spec:
               value: {{ required "cluster.domain is required when cluster.enabled" .Values.cluster.domain | quote }}
             - name: ADMIN_USER
               value: {{ .Values.cluster.adminUsername | default "admin" | quote }}
-            - name: MY_SVC_HOST_VAR
-              value: {{ $svcEnv | quote }}
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_SVC_NAME
+              value: "{{ include "technitium.fullname" . }}-web"
             - name: MY_HTTP_PORT
               value: "{{ .Values.ports.webHttp | default 5380 }}"
             - name: MY_HTTPS_PORT
@@ -109,8 +110,8 @@ spec:
                   name: {{ include "technitium.fullname" . }}-admin
                   key: password
             {{- if $isSecondary }}
-            - name: PRIMARY_SVC_HOST_VAR
-              value: {{ $primarySvcEnv | quote }}
+            - name: PRIMARY_SVC_NAME
+              value: "{{ $primaryFull }}-web"
             - name: PRIMARY_HTTPS_PORT
               value: "{{ .Values.ports.webHttps | default 53443 }}"
             - name: PRIMARY_ADMIN_PASSWORD
@@ -128,11 +129,33 @@ spec:
 
               die() { echo "ERROR: $*" >&2; exit 1; }
 
-              # Resolve own ClusterIP via the kubelet-injected service env var.
-              # Works regardless of the cluster's DNS suffix (which can be
-              # customized away from the default cluster.local).
-              MY_IP="$(printenv "$MY_SVC_HOST_VAR" || true)"
-              [ -n "$MY_IP" ] || die "service env var $MY_SVC_HOST_VAR not set — is the web Service in the same namespace and was the pod created after it?"
+              # Pod IP discovery via the Kubernetes Endpoints API. We use the
+              # pod IP (not the Service ClusterIP) because Kubernetes doesn't
+              # NAT outbound pod traffic to the ClusterIP — so the source IP
+              # on Technitium's heartbeat / AXFR connections IS the pod IP,
+              # and that's what must be registered in the cluster zone for
+              # the catalog-zone allow-list to match.
+              KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+              get_pod_ip() {
+                svc="$1"
+                tries=0
+                while [ $tries -lt 60 ]; do
+                  ip=$(curl -sS --cacert "$KUBE_CA" \
+                    -H "Authorization: Bearer ${KUBE_TOKEN}" --max-time 5 \
+                    "https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/endpoints/${svc}" \
+                    | sed -n 's/.*"ip":"\([0-9.]*\)".*/\1/p' | head -n1)
+                  if [ -n "$ip" ]; then
+                    printf '%s' "$ip"; return 0
+                  fi
+                  tries=$((tries+1)); sleep 2
+                done
+                return 1
+              }
+
+              MY_IP="$(get_pod_ip "$MY_SVC_NAME")" \
+                || die "could not resolve pod IP for endpoints/$MY_SVC_NAME via K8s API"
 
               MY_BASE_HTTPS="https://${MY_IP}:${MY_HTTPS_PORT}"
               MY_BASE_HTTP="http://${MY_IP}:${MY_HTTP_PORT}"
@@ -221,8 +244,8 @@ spec:
               fi
 
               # === secondary path ===
-              PRIMARY_IP="$(printenv "$PRIMARY_SVC_HOST_VAR" || true)"
-              [ -n "$PRIMARY_IP" ] || die "service env var $PRIMARY_SVC_HOST_VAR not set — install the primary release first so its web Service exists in this namespace before the secondary pod is created"
+              PRIMARY_IP="$(get_pod_ip "$PRIMARY_SVC_NAME")" \
+                || die "could not resolve pod IP for endpoints/$PRIMARY_SVC_NAME via K8s API — is the primary release installed and ready?"
               PRIMARY_BASE="https://${PRIMARY_IP}:${PRIMARY_HTTPS_PORT}"
 
               echo "==> waiting for primary cluster to be initialized at $PRIMARY_BASE..."

@@ -44,10 +44,11 @@
    Watch it with:
      kubectl logs --namespace {{ .Release.Namespace }} job/{{ include "technitium.fullname" . }}-cluster-join -f
 
-   ⚠️  Known limitation (Technitium 15.1 and 15.2): post-join heartbeats fail
-   with `UntrustedRoot` against the auto-generated self-signed cert. Joining
-   works; ongoing config-sync does not. See README "Known limitation" section
-   and docs/upstream-pr.md for the fix proposal.
+   ⚠️  Known limitation on Kubernetes: joining works, but ongoing config
+   sync between nodes does NOT — the secondary's catalog zone can't AXFR
+   because pod outbound source IPs don't match the Service ClusterIPs
+   registered with Technitium at join time. See the README "Known
+   limitation" section and docs/upstream-pr.md for the full diagnosis.
 
 {{- else }}
 {{- if .Values.cluster.primaryReleaseName }}

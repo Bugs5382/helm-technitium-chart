@@ -79,11 +79,16 @@ The following table lists the configurable parameters of the Technitium chart an
 | cluster.autoJoin | Run a post-install Job that calls the cluster init/join API. | `true` | No |
 | cluster.adminUsername | Admin username used by the join Job to authenticate. | `"admin"` | No |
 | cluster.primaryNodeTotp | TOTP for the primary's admin user when 2FA is enabled. | `""` | No |
-| cluster.headless | Add a second, headless Service (`<release>-technitium-headless`) for direct peer traffic. | `false` | No |
 | cluster.jobImage.repository | Image used by the cluster-join Job (must include `curl`, non-root). | `curlimages/curl` | No |
 | cluster.jobImage.tag | Tag for the join-Job image. | `"8.10.1"` | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
+
+## 🔖 Versioning & Releases
+
+The chart `appVersion` tracks the [Technitium DNS Server](https://github.com/TechnitiumSoftware/DnsServer) release it deploys, and the chart `version` follows semantic versioning for chart changes.
+
+**Release cadence:** every upstream Technitium release gets a matching chart release. When Technitium publishes a new version, bump `appVersion` in `technitium/Chart.yaml` to it, bump the chart `version`, and publish a chart release so the Helm repository offers an installable version per upstream release. Chart-only changes (template fixes, new values) ship as their own chart `version` bump without an `appVersion` change.
 
 ## 🔐 Security & Admin Password
 
@@ -103,7 +108,7 @@ Two (or more) Helm releases of this chart can join a single Technitium cluster �
 
 - **Each release is a node.** Both releases live in the same namespace; resource names are prefixed with `{Release.Name}-technitium-…`, so there are no collisions.
 - **Web service over HTTPS.** Technitium clustering uses DANE-EE for node-to-node TLS, so the web service must be HTTPS and TLS cannot be terminated by a reverse proxy. Setting `cluster.enabled=true` flips on HTTPS with a self-signed certificate automatically.
-- **Stable peer IPs come from the ClusterIP Service.** The cluster zone holds A/TLSA records that point at each peer's ClusterIP — those IPs survive pod restarts. (Pod IPs would not. A headless service is available via `cluster.headless=true` for cases where you want it, but it's not used by the join automation.)
+- **Stable peer IPs come from the ClusterIP Service.** The cluster zone holds A/TLSA records that point at each peer's ClusterIP — those IPs survive pod restarts. Pod IPs would not.
 - **Automated join via Helm hook.** With `cluster.autoJoin=true` (default), a post-install Job per release calls the Technitium HTTP API: `/api/admin/cluster/init` on the primary, `/api/admin/cluster/initJoin` on each secondary. The Job is idempotent — on re-runs it checks `/api/admin/cluster/state` and exits cleanly if the node is already in the cluster.
 
 ### Install order
@@ -162,16 +167,27 @@ kubectl -n technitium-test get all -l technitium.io/cluster-domain=ns-example-lo
 - DHCP service clustering is not supported by Technitium yet.
 - Each release is a single-replica `Deployment` with its own PVC — scaling beyond 1 replica per release is out of scope; clustering across multiple releases is the supported topology.
 
-### Known limitation: heartbeats fail against the default self-signed cert
+### Known limitation: cluster config sync (catalog zone) fails on Kubernetes
 
-Technitium's cluster heartbeat path validates the peer's HTTPS certificate via standard PKIX, **not** via DANE-EE as the official clustering blog describes. The `ignoreCertificateErrors=true` flag passed to `/api/admin/cluster/initJoin` is honored only for the bootstrap join and is not persisted, so subsequent heartbeats fail with `UntrustedRoot` against the auto-generated self-signed cert that every node creates on first init. Verified against Technitium 15.1.0 *and* 15.2.0 (latest as of 2026-05-09): `ClusterNode.cs:196` hard-codes `ignoreCertificateErrors: false` in both releases.
+Joining works (`cluster.autoJoin` Job calls `/api/admin/cluster/initJoin` successfully), but **ongoing config sync between nodes doesn't**, because of a fundamental impedance mismatch between Technitium's IP-based cluster identity and Kubernetes pod networking:
 
-Symptom: `kubectl logs deploy/<release>-technitium` shows `Heartbeat failed for Primary node ... RemoteCertificateChainErrors: UntrustedRoot`, and the secondary's `/api/admin/cluster/state` reports the primary as `Unreachable` (asymmetric — the primary still reports the secondary as `Connected`).
+- At join time the chart registers each release's **web Service ClusterIP** with Technitium (since pod IPs are ephemeral).
+- Technitium's primary catalog zone (`cluster-catalog.<cluster.domain>`) automatically restricts AXFR/IXFR to the IPs registered for each cluster member.
+- But when a pod in Kubernetes initiates an outbound DNS zone transfer, the **source IP on the wire is the pod IP**, not the Service ClusterIP it ostensibly "owns". The two don't match, so the primary refuses the zone transfer:
 
-The chart's `cluster.autoJoin` Job will still complete successfully (joining works); it's the ongoing config-sync heartbeats that don't trust the peer's cert. Two workarounds:
+  ```
+  DNS Server refused a zone transfer request since the request IP address
+  is not allowed by the zone: cluster-catalog.ns.example.local
+  ```
 
-1. **Supply a trusted certificate.** Provision a PFX cert from a CA that both pods trust (e.g., a cert-manager-issued one whose root is in the system trust store), mount it into both pods, and set `config.webServiceEnableHttps=true` + `config.webServiceTlsCertificatePath` + `config.webServiceTlsCertificatePassword` so Technitium serves the trusted cert from boot. Then no self-signed fallback gets generated.
-2. **Wait for the upstream fix.** A detailed reproduction, root-cause analysis, and proposed patch live at [`docs/upstream-pr.md`](docs/upstream-pr.md) in this repo — ready to submit to [TechnitiumSoftware/DnsServer](https://github.com/TechnitiumSoftware/DnsServer).
+- Without the catalog zone, the secondary never receives the TLSA records the primary publishes for each node. DANE-EE on the heartbeat path therefore has nothing to validate against and falls back to PKIX, which fails for the auto-generated self-signed cert with `UntrustedRoot`. From the secondary's view the primary stays `Unreachable`.
+
+Workarounds that *do* work but are out of the chart's scope today:
+
+1. **Match outbound to inbound.** Use a CNI / Service config that NAT-sources pod traffic to the Service ClusterIP (e.g. `service.kubernetes.io/topology-mode: PreferLocal` plus a Cilium / kube-router SNAT, or a sidecar that does the rewrite). Once outbound AXFR comes from the registered ClusterIP, zone transfer succeeds, TLSA syncs, DANE-EE validates.
+2. **Provide a real cert from a shared CA.** Issue per-node certs from a CA whose root is in both pods' trust stores. PKIX then succeeds without needing DANE-EE / TLSA records at all. Doesn't fix catalog *content* sync, but takes the heartbeat failure off the critical path.
+
+We previously misdiagnosed this as a missing flag in Technitium's heartbeat path. The upstream PR ([TechnitiumSoftware/DnsServer#1921](https://github.com/TechnitiumSoftware/DnsServer/pull/1921)) was correctly closed by the maintainer — DANE-EE *is* enabled on the heartbeat path; the issue is that the chart never gives the secondary's catalog zone a chance to sync. The full diagnosis trail lives in [`docs/upstream-pr.md`](docs/upstream-pr.md).
 
 ## 🌐 Ingress
 

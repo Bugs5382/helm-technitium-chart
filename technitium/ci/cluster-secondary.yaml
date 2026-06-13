@@ -29,4 +29,3 @@ cluster:
   primaryReleaseName: "tech-a"        # Helm release name of the primary
   autoHttps: true
   autoJoin: true
-  headless: true

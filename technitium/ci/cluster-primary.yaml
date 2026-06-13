@@ -35,4 +35,3 @@ cluster:
   primaryReleaseName: ""
   autoHttps: true
   autoJoin: true
-  headless: true

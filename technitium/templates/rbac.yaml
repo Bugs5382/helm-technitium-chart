@@ -1,0 +1,74 @@
+{{/*
+MIT License
+
+Copyright (c) 2026 Shane & Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/}}
+{{/*
+  Cluster mode needs the post-install Job and the per-pod IP-updater sidecar
+  to look up the *real pod IP* behind each release's web Service. The pod IP
+  is the source IP of outbound traffic from the pod (Kubernetes does not SNAT
+  pod traffic to the Service ClusterIP), so it has to be the IP we register
+  with Technitium — otherwise catalog-zone AXFR will be refused because the
+  allow-list contains a ClusterIP that the wire never sees.
+
+  We do that lookup via the Kubernetes Endpoints API, scoped via a narrow
+  Role to just the specific web Services we care about (own; primary if
+  secondary). The ServiceAccount is the one the chart already creates.
+*/}}
+{{- if and .Values.cluster.enabled .Values.cluster.autoJoin -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- $ownSvc := printf "%s-web" (include "technitium.fullname" .) -}}
+{{- $primaryFull := "" -}}
+{{- if .Values.cluster.primaryReleaseName -}}
+{{- $primaryFull = printf "%s-%s" .Values.cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "technitium.fullname" . }}-cluster
+  labels:
+    {{- include "technitium.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster-rbac
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    resourceNames:
+      - {{ $ownSvc | quote }}
+      {{- if $primaryFull }}
+      - {{ printf "%s-web" $primaryFull | quote }}
+      {{- end }}
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "technitium.fullname" . }}-cluster
+  labels:
+    {{- include "technitium.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster-rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "technitium.fullname" . }}-cluster
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "technitium.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

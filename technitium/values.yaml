@@ -77,6 +77,23 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   # tag: ""
 
+# Deployment update strategy.
+#
+# Technitium keeps its config and zone data on a single ReadWriteOnce PVC, which
+# Kubernetes will not mount on two pods at once. With the default RollingUpdate,
+# Kubernetes tries to start the new pod before the old one releases the volume,
+# so the rollout deadlocks (new pod stuck Pending). Recreate terminates the old
+# pod first, then starts the new one -- a brief DNS outage during the swap, but
+# no deadlock. This is the only safe single-replica option on a ReadWriteOnce
+# volume.
+#
+# For zero-downtime updates, run Technitium in cluster mode (see `cluster`
+# below): multiple instances, each with its own volume and external IP, where a
+# secondary syncs zones from the primary. Clients always have a live resolver, so
+# replicas can be rolled one at a time -- set `type: RollingUpdate` there.
+updateStrategy:
+  type: Recreate
+
 ports:
   # Port for the DNS web management console (HTTP).
   webHttp: 5380
@@ -228,14 +245,6 @@ cluster:
   # web service with a self-signed cert — required for DANE-EE node-to-node
   # TLS. Set to false only if you are terminating TLS some other way (rare).
   autoHttps: true
-
-  # When true, add a second, headless Service (`<fullname>-headless`) alongside
-  # the standard ClusterIP web Service. The headless service resolves to the
-  # pod IP, which is useful if you want to bypass kube-proxy for peer traffic.
-  # Note: with a single-replica Deployment, the pod IP changes on restart, so
-  # the headless DNS record will churn — the chart's API automation uses the
-  # stable ClusterIP, not the headless name. This is purely opt-in extra.
-  headless: false
 
   # Automate cluster init/join via Technitium's HTTP admin API after install.
   # - Primary release (cluster.primaryReleaseName is empty): runs a post-install
