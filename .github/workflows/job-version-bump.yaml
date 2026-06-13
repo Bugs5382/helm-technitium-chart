@@ -18,7 +18,7 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name: Version Manager
+name: Release Manager
 
 on:
   workflow_dispatch:
@@ -54,11 +54,11 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3.1.1
         with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
+          client-id: "Iv23ligVrrLzGPXe28dn"
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: 📂 Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
@@ -81,11 +81,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Detect releasable changes
+        id: releasable
+        env:
+          BODY: ${{ steps.drafter.outputs.body }}
+        run: |
+          # On a push, skip the prep when release-drafter found no PR entries
+          # (nothing releasable) so the chart version does not drift ahead. A
+          # manual workflow_dispatch always runs the full lifecycle.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || printf '%s' "$BODY" | grep -qE '\(#[0-9]+\)'; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No releasable changes since the last release; skipping the prep commit."
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update Helm Chart Version
+        if: steps.releasable.outputs.yes == 'true'
         run: |
           task update-helm-version NEW_VERSION=${{ steps.drafter.outputs.resolved_version }}
 
-      - name: 📤 Changelog Action
+      - name: Changelog Action
+        if: steps.releasable.outputs.yes == 'true'
         uses: Bugs5382/changelog-updater-action@v0.3.2
         env:
           LOG_LEVEL: debug
@@ -99,9 +116,13 @@ jobs:
           diff: 'true'
 
       - name: Commit and Push Version Update
-        uses: stefanzweifel/git-auto-commit-action@v4
+        if: steps.releasable.outputs.yes == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(pre-release): v${{ steps.drafter.outputs.resolved_version }} [skip ci]"
+          commit_user_name: ${{ github.actor }}
+          commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+          commit_author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
 
   Release:
     if: github.event_name == 'release'
@@ -113,19 +134,19 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3.1.1
         with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
+          client-id: "Iv23ligVrrLzGPXe28dn"
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
       - name: Configure git identity
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
+          git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${{ github.actor }}"
 
       - name: Install Helm
         uses: azure/setup-helm@v4
