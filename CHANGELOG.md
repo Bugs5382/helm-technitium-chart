@@ -1,5 +1,25 @@
 # Helm Technitium Chart
 
+## v0.2.0 - 2026-06-13
+
+### What Changed 👀
+
+#### 🚀 Features
+
+- feat: updates @Bugs5382 (#23)
+
+#### 🐛 Bug Fixes
+
+- feat: updates @Bugs5382 (#23)
+
+#### 📄 Documentation
+
+- feat: updates @Bugs5382 (#23)
+
+### Extra
+
+**Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.1.0...v0.2.0
+
 ## v0.1.0 - 2026-04-24
 
 ### What Changed 👀
