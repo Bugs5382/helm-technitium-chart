@@ -63,7 +63,7 @@ jobs:
             esac
             # Emoji allowed in Markdown and .github; blocked elsewhere.
             case "$f" in
-              .github/*|*.md) : ;;
+              .github/*|*.md|NOTES.txt|*/NOTES.txt) : ;;
               *) e="$(gov_find_emoji < "$f")"; [ -n "$e" ] && { echo "emoji not allowed in $f:"; echo "$e"; fail=1; } ;;
             esac
             # AI-tells blocked except in files that document the rule.
