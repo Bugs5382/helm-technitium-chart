@@ -77,20 +77,20 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   # tag: ""
 
-# Deployment update strategy.
+# Deployment update strategy. Recreate is REQUIRED and enforced at render time:
+# any other value fails `helm template`/`install` with a clear error.
 #
 # Technitium keeps its config and zone data on a single ReadWriteOnce PVC, which
-# Kubernetes will not mount on two pods at once. With the default RollingUpdate,
-# Kubernetes tries to start the new pod before the old one releases the volume,
-# so the rollout deadlocks (new pod stuck Pending). Recreate terminates the old
-# pod first, then starts the new one -- a brief DNS outage during the swap, but
-# no deadlock. This is the only safe single-replica option on a ReadWriteOnce
-# volume.
+# Kubernetes will not mount on two pods at once. With RollingUpdate, Kubernetes
+# tries to start the new pod before the old one releases the volume, so the
+# rollout deadlocks (new pod stuck Pending). Recreate terminates the old pod
+# first, then starts the new one -- a brief DNS outage during the swap, but no
+# deadlock. It is the only safe option on a ReadWriteOnce volume.
 #
-# For zero-downtime updates, run Technitium in cluster mode (see `cluster`
-# below): multiple instances, each with its own volume and external IP, where a
-# secondary syncs zones from the primary. Clients always have a live resolver, so
-# replicas can be rolled one at a time -- set `type: RollingUpdate` there.
+# For high availability without an update outage, run Technitium in cluster mode
+# (see `cluster` below): separate releases, each with its own instance, volume,
+# and external IP, where a secondary syncs zones from the primary, so one node
+# stays live while another restarts.
 updateStrategy:
   type: Recreate
 
