@@ -2,7 +2,7 @@ apiVersion: v2
 name: technitium
 description: A Helm chart for deploying Technitium DNS Server on Kubernetes, providing recursive DNS resolution, blocklists, DoH/DoT/DoQ encrypted protocols, and a web-based management console.
 type: application
-version: 0.2.0
+version: 0.3.0
 icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/technitium.png
 appVersion: "15.2.0"
 home: https://github.com/Bugs5382/helm-technitium-chart

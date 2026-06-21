@@ -1,5 +1,17 @@
 # Helm Technitium Chart
 
+## v0.3.0 - 2026-06-21
+
+### What Changed 👀
+
+#### 🚀 Features
+
+- feat: enforce Recreate update strategy (reject RollingUpdate) @Bugs5382 (#31)
+
+### Extra
+
+**Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.2.0...v0.3.0
+
 ## v0.2.0 - 2026-06-13
 
 ### What Changed 👀
