@@ -28,6 +28,9 @@ metadata:
   labels:
     {{- include "technitium.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
+    {{- with include "technitium.serviceExtraLabels" (dict "root" . "labels" .Values.service.web.labels) | trim }}
+    {{- . | nindent 4 }}
+    {{- end }}
   {{- with .Values.service.web.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -84,6 +87,9 @@ metadata:
   labels:
     {{- include "technitium.labels" . | nindent 4 }}
     app.kubernetes.io/component: dns
+    {{- with include "technitium.serviceExtraLabels" (dict "root" . "labels" .Values.service.dns.labels) | trim }}
+    {{- . | nindent 4 }}
+    {{- end }}
   {{- with .Values.service.dns.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

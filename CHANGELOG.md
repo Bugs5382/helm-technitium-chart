@@ -6,7 +6,13 @@
 
 #### 🚀 Features
 
+- feat: add service labels passthrough to the Service templates @Bugs5382 (#40)
 - feat: enforce Recreate update strategy (reject RollingUpdate) @Bugs5382 (#31)
+
+#### 🐛 Bug Fixes
+
+- fix(ci-values): use hash license headers in the example values files @Bugs5382 (#45)
+- fix(cluster-join): resolve pod IPs through EndpointSlices @Bugs5382 (#39)
 
 #### 📄 Documentation
 

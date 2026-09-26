@@ -21,6 +21,6 @@
 golic:
   mergeRules: true
   rules:
-    "technitium/**/*.yaml":
+    "technitium/templates/*.yaml":
       prefix: "{{/*"
       suffix: "*/}}"
