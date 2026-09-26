@@ -1,0 +1,90 @@
+# MIT License
+#
+# Copyright (c) 2026 Shane & Contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+name: Technitium Version Tracker
+# Opens an issue and a bump PR when a newer stable Technitium DNS Server image
+# is on Docker Hub than the chart appVersion (issue #37). The owner still
+# reviews, merges and releases. The logic lives in
+# .github/scripts/technitium-version.sh so it can be unit-tested.
+#
+# The PR is opened with the release GitHub App token, not GITHUB_TOKEN, because
+# a PR opened with GITHUB_TOKEN does not trigger the repo's CI.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"  # Daily at 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only log what would be done"
+        type: boolean
+        default: true
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/scripts/technitium-version*.sh'
+      - '.github/workflows/job-technitium-bump.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'tracker' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 🧪 Test Version Script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run unit tests
+        run: bash .github/scripts/technitium-version_test.sh
+
+  bump:
+    name: 🔄 Check Technitium Release
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.1.1
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Check for a new release and open the bump
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          GITHUB_ACTOR_ID: ${{ github.actor_id }}
+        run: bash .github/scripts/technitium-version.sh run
