@@ -101,6 +101,20 @@ true
 {{- end }}
 
 {{/*
+Zone bootstrap sidecar toggle (issue #43): on when bootstrap.enabled and at
+least one zone is listed, and never on a cluster secondary (zones created on
+the primary reach secondaries through the cluster catalog). Returns "true"
+or "".
+*/}}
+{{- define "technitium.bootstrapEnabled" -}}
+{{- $b := .Values.bootstrap | default dict -}}
+{{- $secondary := and .Values.cluster.enabled (ne (.Values.cluster.primaryReleaseName | toString) "") -}}
+{{- if and $b.enabled (or $b.zones $b.reverseZones) (not $secondary) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
 User-supplied Service labels (issue #32), for label-selecting controllers
 such as Cilium LB-IPAM `serviceSelector`. Merges `service.labels` (every
 Service) with the per-Service map passed as `labels` (per-Service wins).
