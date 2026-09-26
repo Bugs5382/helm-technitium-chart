@@ -128,21 +128,41 @@ until curl -fsS -o /dev/null --max-time 3 "${API_BASE}/api/status" 2>/dev/null; 
 done
 log info "Technitium API is up after ${tries} retries"
 
-resp="$(curl -sS --max-time 10 -X POST "${API_BASE}/api/user/login" \
-  --data-urlencode "user=${ADMIN_USER:-admin}" \
-  --data-urlencode "pass=${ADMIN_PASSWORD}" \
-  --data-urlencode "includeInfo=false")" || die "login transport error"
-TOKEN="$(printf '%s' "$resp" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' | head -n1)"
-[ -n "$TOKEN" ] || die "login as ${ADMIN_USER:-admin} failed: $(printf '%s' "$resp" | error_of). The password comes from the chart admin Secret; if it was changed in the web UI, change it back or update the Secret."
-check="$(api /api/user/session/get)" || die "session check transport error"
-[ "$(printf '%s' "$check" | status_of)" = "ok" ] || die "API rejected the bootstrap credentials: $(printf '%s' "$check" | error_of)"
-log info "authenticated"
+# login: open a session with the admin password and verify it. Called again
+# whenever a later call reports the session as invalid (for example after a
+# config restore replaced the auth config).
+login() {
+  # Retry transport errors briefly: the web service restarts after a config
+  # restore, and the old session goes invalid at the same moment.
+  lt=0
+  until resp="$(curl -sS --max-time 10 -X POST "${API_BASE}/api/user/login" \
+    --data-urlencode "user=${ADMIN_USER:-admin}" \
+    --data-urlencode "pass=${ADMIN_PASSWORD}" \
+    --data-urlencode "includeInfo=false")"; do
+    lt=$((lt + 1))
+    [ $lt -le 20 ] || die "login transport error after ${lt} attempts"
+    log warn "login request failed (attempt ${lt}); retrying"
+    sleep 3
+  done
+  TOKEN="$(printf '%s' "$resp" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' | head -n1)"
+  [ -n "$TOKEN" ] || die "login as ${ADMIN_USER:-admin} failed: $(printf '%s' "$resp" | error_of). The password comes from the chart admin Secret; if it was changed in the web UI, change it back or update the Secret."
+  check="$(api /api/user/session/get)" || die "session check transport error"
+  [ "$(printf '%s' "$check" | status_of)" = "ok" ] || die "API rejected the bootstrap credentials: $(printf '%s' "$check" | error_of)"
+  log info "authenticated"
+}
+login
 
 if [ "${WAIT_FOR_CLUSTER:-false}" = "true" ]; then
   # Cluster primary: zones join the cluster catalog so they sync to the
   # secondaries, and the catalog exists only after the join Job ran init.
   tries=0
-  until api /api/admin/cluster/state | grep -q '"clusterInitialized":true'; do
+  while :; do
+    state="$(api /api/admin/cluster/state)" || state=""
+    printf '%s' "$state" | grep -q '"clusterInitialized":true' && break
+    if printf '%s' "$state" | grep -q '"status":"invalid-token"\|Invalid token or session expired'; then
+      log warn "session no longer valid; logging in again"
+      login
+    fi
     tries=$((tries + 1))
     [ $tries -le 200 ] || die "cluster not initialized after ${tries} checks; is cluster.autoJoin off?"
     log debug "waiting for cluster init before creating catalog member zones (check ${tries})"
