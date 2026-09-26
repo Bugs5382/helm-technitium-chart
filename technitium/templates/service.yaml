@@ -63,13 +63,10 @@ spec:
       protocol: TCP
     {{- end }}
     {{- if .Values.cluster.enabled }}
-    # Cluster mode: peer nodes send DNS NOTIFY / AXFR / IXFR to the same IP
-    # they use for the HTTPS admin API (the IP registered at join time —
-    # this Service's ClusterIP). Port 53 needs to answer here too, otherwise
-    # NOTIFY is dropped on the floor. Note: opening the port is necessary
-    # but not sufficient — outbound AXFR from a pod is sourced from the pod
-    # IP, not the ClusterIP, so the catalog zone's allow-list still rejects
-    # it. See README "Known limitation" for the full story.
+    # Cluster mode (issue #3): this Service's ClusterIP is the node address
+    # registered with Technitium, so peers send the HTTPS API, NOTIFY and
+    # AXFR/IXFR here. Replies to peers leave from the pod IP, which the
+    # cluster.podNetworks settings allow.
     - name: dns-udp
       port: 53
       targetPort: dns-udp
@@ -140,3 +137,44 @@ spec:
       targetPort: dhcp
       protocol: UDP
     {{- end }}
+{{- /*
+  Shared DNS front for a Technitium cluster (issue #3), rendered by the
+  primary release only. It selects the pods of every release in this
+  namespace with the same cluster.domain, so clients keep one address when a
+  node is down; the cluster keeps the nodes' data in sync.
+*/}}
+{{- $front := .Values.cluster.frontService | default dict }}
+{{- if and .Values.cluster.enabled $front.enabled (eq (.Values.cluster.primaryReleaseName | toString) "") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "technitium.fullname" . }}-cluster-dns
+  labels:
+    {{- include "technitium.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster-dns
+    {{- with include "technitium.serviceExtraLabels" (dict "root" . "labels" $front.labels) | trim }}
+    {{- . | nindent 4 }}
+    {{- end }}
+  {{- with $front.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $front.type | default "LoadBalancer" }}
+  {{- if $front.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ $front.externalTrafficPolicy }}
+  {{- end }}
+  selector:
+    app.kubernetes.io/name: {{ include "technitium.name" . }}
+    technitium.io/cluster-domain: {{ .Values.cluster.domain | replace "." "-" | trunc 63 | trimSuffix "-" | quote }}
+  ports:
+    - name: dns-udp
+      port: 53
+      targetPort: dns-udp
+      protocol: UDP
+    - name: dns-tcp
+      port: 53
+      targetPort: dns-tcp
+      protocol: TCP
+{{- end }}

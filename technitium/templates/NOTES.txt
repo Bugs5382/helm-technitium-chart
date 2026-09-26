@@ -50,11 +50,10 @@
    Watch it with:
      kubectl logs --namespace {{ .Release.Namespace }} job/{{ include "technitium.fullname" . }}-cluster-join -f
 
-   ⚠️  Known limitation on Kubernetes: joining works, but ongoing config
-   sync between nodes does NOT — the secondary's catalog zone can't AXFR
-   because pod outbound source IPs don't match the Service ClusterIPs
-   registered with Technitium at join time. See the README "Known
-   limitation" section and docs/upstream-pr.md for the full diagnosis.
+   Each node is registered at its web ClusterIP, which survives pod restarts.
+{{- if not .Values.cluster.primaryReleaseName }}
+   The primary allows zone transfers and NOTIFY from: {{ .Values.cluster.podNetworks | default list | toString }}
+{{- end }}
 
 {{- else }}
 {{- if .Values.cluster.primaryReleaseName }}
@@ -75,7 +74,9 @@
      b. Administration → Cluster → Initialize New Cluster.
      c. Cluster domain: {{ .Values.cluster.domain }}
      d. Node IP: this node's web ClusterIP (see command above).
-     e. On each secondary release, follow the Join Cluster steps printed in its own NOTES.
+     e. Settings: add your pod CIDR to Zone Transfer Allowed Networks and
+        Notify Allowed Networks, or the catalog zone will not sync.
+     f. On each secondary release, follow the Join Cluster steps printed in its own NOTES.
 {{- end }}
 {{- end }}
 {{- end }}

@@ -27,13 +27,27 @@ OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 {{- if $isSecondary -}}
 {{- $primaryFull = printf "%s-%s" .Values.cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+{{- $podNetworks := .Values.cluster.podNetworks | default list -}}
+{{- if kindIs "string" $podNetworks -}}
+{{- $podNetworks = splitList "," $podNetworks -}}
+{{- end -}}
+{{- if and (not $isSecondary) (not $podNetworks) -}}
+{{- fail "cluster.podNetworks is required on the cluster primary: list the pod CIDR(s) of this Kubernetes cluster (e.g. 10.244.0.0/16) so nodes accept zone transfers and NOTIFY from each other's pod IPs" -}}
+{{- end -}}
 {{/*
-  We register each release's *real* pod IP (not its Service ClusterIP) with
-  Technitium at join time, because Kubernetes doesn't NAT outbound pod
-  traffic to the ClusterIP — the source IP on AXFR/heartbeat connections is
-  the pod IP. If the catalog zone allow-list contains a ClusterIP that
-  never matches what's on the wire, sync fails. Pod IPs are resolved at
-  runtime via the Kubernetes EndpointSlice API (RBAC in templates/rbac.yaml).
+  Issue #3: each node is registered with Technitium at its release's web
+  Service ClusterIP, which stays the same across pod restarts. Technitium
+  expects node addresses to be static ("these IP addresses must be either
+  static or care must be taken to ensure that they do not change later").
+  Registering the pod IP broke the cluster on every restart.
+
+  Outbound AXFR and NOTIFY from a pod carry the pod IP as their source, not
+  the ClusterIP, so the primary also sets the cluster-wide settings
+  zoneTransferAllowedNetworks and notifyAllowedNetworks to
+  cluster.podNetworks. Technitium syncs those settings to every node.
+
+  ClusterIPs are resolved through cluster DNS, so the Job needs no
+  Kubernetes API access.
 */}}
 {{/*
   Install order note: when this is a secondary release, the primary release
@@ -69,6 +83,8 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "technitium.serviceAccountName" . }}
+      # The Job only talks to Technitium and cluster DNS (issue #3).
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
@@ -109,6 +125,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "technitium.fullname" . }}-admin
                   key: password
+            {{- if not $isSecondary }}
+            - name: POD_NETWORKS
+              value: {{ $podNetworks | join "," | nospace | quote }}
+            {{- end }}
             {{- if $isSecondary }}
             - name: PRIMARY_SVC_NAME
               value: "{{ $primaryFull }}-web"
@@ -131,78 +151,44 @@ spec:
 
               log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >&2; }
 
-              # Pod IP discovery via the Kubernetes EndpointSlice API
-              # (discovery.k8s.io/v1). We use the pod IP (not the Service
-              # ClusterIP) because Kubernetes doesn't NAT outbound pod traffic
-              # to the ClusterIP, so the source IP on Technitium's heartbeat /
-              # AXFR connections IS the pod IP, and that's what must be
-              # registered in the cluster zone for the catalog-zone allow-list
-              # to match.
-              #
-              # Issue #33: the old lookup read v1 Endpoints (deprecated since
-              # Kubernetes 1.33) and matched `"ip":"..."` with sed. The API
-              # server pretty-prints JSON for a curl user agent, so the real
-              # body carried `"ip": "..."` and the match never fired. We now
-              # ask for compact output (`pretty=false`) and also strip all
-              # whitespace before parsing, so either format works.
-              KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-              KUBE_API="https://kubernetes.default.svc"
+              # Resolve a Service's ClusterIP through cluster DNS (busybox
+              # nslookup in the Job image). The ClusterIP is this node's stable
+              # cluster address (issue #3); it does not change when the pod
+              # restarts, unlike the pod IP the chart used to register.
+              # busybox nslookup does not apply the resolv.conf search path, so
+              # build the FQDN from the pod's first search domain, which is
+              # "<namespace>.svc.<cluster-domain>" on Kubernetes. This keeps
+              # clusters with a non-default cluster domain working.
+              SVC_SUFFIX="$(sed -n 's/^search[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' /etc/resolv.conf | head -n1)"
+              case "$SVC_SUFFIX" in
+                "${NAMESPACE}.svc."*) : ;;
+                *) log "resolv.conf search domain '${SVC_SUFFIX}' is not '${NAMESPACE}.svc.*'; assuming cluster.local"
+                   SVC_SUFFIX="${NAMESPACE}.svc.cluster.local" ;;
+              esac
+              log "service DNS suffix: ${SVC_SUFFIX}"
 
-              # Print the first ready endpoint address from an EndpointSlice
-              # list on stdin (IPv4 preferred). Each endpoint object starts
-              # with `{"addresses":[...]`, so we split on that and drop any
-              # endpoint whose conditions say `"ready":false` (terminating or
-              # not-yet-ready pods). An absent ready condition means ready,
-              # per the EndpointSlice API contract.
-              pick_ready_ip() {
-                ips="$(tr -d '[:space:]' \
-                  | sed 's/{"addresses":\[/\
-              &/g' \
-                  | grep '^{"addresses":\["' \
-                  | grep -v '"ready":false' \
-                  | sed -n 's/^{"addresses":\["\([^"]*\)".*/\1/p')"
-                v4="$(printf '%s\n' "$ips" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
-                if [ -n "$v4" ]; then printf '%s' "$v4"; return 0; fi
-                printf '%s\n' "$ips" | sed -n '/./{p;q;}'
-              }
-
-              get_pod_ip() {
+              get_svc_ip() {
                 svc="$1"
-                url="${KUBE_API}/apis/discovery.k8s.io/v1/namespaces/${NAMESPACE}/endpointslices?labelSelector=kubernetes.io%2Fservice-name%3D${svc}&pretty=false"
-                log "resolving pod IP for service ${svc} via EndpointSlices"
+                fqdn="${svc}.${SVC_SUFFIX}"
+                log "resolving ClusterIP of service ${fqdn}"
                 tries=0
                 while [ $tries -lt 60 ]; do
                   tries=$((tries+1))
-                  body="$(curl -sS --cacert "$KUBE_CA" \
-                    -H "Authorization: Bearer ${KUBE_TOKEN}" \
-                    -H "Accept: application/json" --max-time 5 \
-                    -w '\n%{http_code}' "$url" 2>&1)" || {
-                      log "attempt ${tries}/60: request to K8s API failed: $(printf '%s' "$body" | tail -n1)"
-                      sleep 2; continue
-                    }
-                  code="$(printf '%s' "$body" | tail -n1)"
-                  body="$(printf '%s' "$body" | sed '$d')"
-                  if [ "$code" != "200" ]; then
-                    # 403 here means the Role in templates/rbac.yaml is missing
-                    # or not bound to this ServiceAccount.
-                    log "attempt ${tries}/60: K8s API returned HTTP ${code} for endpointslices of ${svc}: $(printf '%s' "$body" | head -c 300)"
-                    sleep 2; continue
-                  fi
-                  ip="$(printf '%s' "$body" | pick_ready_ip)"
+                  out="$(nslookup -type=A "$fqdn" 2>&1)" || true
+                  ip="$(printf '%s\n' "$out" | sed -n '/^Name:/,$ s/^Address:[[:space:]]*\([0-9.]*\)$/\1/p' | head -n1)"
                   if [ -n "$ip" ]; then
-                    log "service ${svc} resolved to pod IP ${ip} (attempt ${tries})"
+                    log "service ${fqdn} has ClusterIP ${ip} (attempt ${tries})"
                     printf '%s' "$ip"; return 0
                   fi
-                  log "attempt ${tries}/60: no ready endpoint for ${svc} yet"
+                  log "attempt ${tries}/60: no A record for ${fqdn} yet: $(printf '%s' "$out" | tr '\n' ' ' | head -c 200)"
                   sleep 2
                 done
-                log "gave up resolving ${svc} after ${tries} attempts"
+                log "gave up resolving ${fqdn} after ${tries} attempts"
                 return 1
               }
 
-              MY_IP="$(get_pod_ip "$MY_SVC_NAME")" \
-                || die "could not resolve pod IP for service $MY_SVC_NAME via the EndpointSlice API"
+              MY_IP="$(get_svc_ip "$MY_SVC_NAME")" \
+                || die "could not resolve the ClusterIP of service $MY_SVC_NAME"
 
               MY_BASE_HTTPS="https://${MY_IP}:${MY_HTTPS_PORT}"
               MY_BASE_HTTP="http://${MY_IP}:${MY_HTTP_PORT}"
@@ -261,17 +247,35 @@ spec:
               fi
               [ -n "${SELF_TOKEN:-}" ] || die "could not log in to self at $SELF_BASE — neither own password nor primary password was accepted"
 
-              SELF_STATE="$(cluster_state "$SELF_BASE" "$SELF_TOKEN" "$SELF_TLS_FLAG")"
-              SELF_INIT="$(printf '%s' "$SELF_STATE" | json_bool clusterInitialized)"
-              if [ "$SELF_INIT" = "true" ]; then
-                echo "==> this node is already in a cluster; nothing to do"
-                exit 0
-              fi
-
               # Technitium API returns HTTP 200 even on errors and signals the
               # actual outcome in the body's `"status"` field. So we capture the
               # body and assert `"status":"ok"` ourselves.
               api_status() { grep -o '"status":"[^"]*"' | head -n1 | cut -d'"' -f4; }
+
+              # Primary only: allow zone transfers and NOTIFY from the pod
+              # networks (issue #3). Outbound traffic from a node carries its
+              # pod IP, not the registered ClusterIP. These are cluster
+              # parameters, so Technitium copies them to every node. Applied on
+              # every run so a changed cluster.podNetworks takes effect.
+              apply_pod_networks() {
+                log "setting zoneTransferAllowedNetworks and notifyAllowedNetworks to ${POD_NETWORKS}"
+                resp="$(curl -sS $SELF_TLS_FLAG --max-time 30 -X POST \
+                  -H "Authorization: Bearer ${SELF_TOKEN}" \
+                  --data-urlencode "zoneTransferAllowedNetworks=${POD_NETWORKS}" \
+                  --data-urlencode "notifyAllowedNetworks=${POD_NETWORKS}" \
+                  "${SELF_BASE}/api/settings/set")" || die "settings/set transport error"
+                st="$(printf '%s' "$resp" | api_status)"
+                [ "$st" = "ok" ] || { echo "$resp" >&2; die "settings/set returned status='$st'"; }
+                log "pod network settings applied"
+              }
+
+              SELF_STATE="$(cluster_state "$SELF_BASE" "$SELF_TOKEN" "$SELF_TLS_FLAG")"
+              SELF_INIT="$(printf '%s' "$SELF_STATE" | json_bool clusterInitialized)"
+              if [ "$SELF_INIT" = "true" ]; then
+                echo "==> this node is already in a cluster"
+                if [ "$ROLE" = "primary" ]; then apply_pod_networks; fi
+                exit 0
+              fi
 
               if [ "$ROLE" = "primary" ]; then
                 echo "==> initializing cluster '${CLUSTER_DOMAIN}' with primary IP ${MY_IP}"
@@ -287,12 +291,13 @@ spec:
                   die "cluster/init returned status='$st'"
                 fi
                 echo "==> primary initialized: $resp"
+                apply_pod_networks
                 exit 0
               fi
 
               # === secondary path ===
-              PRIMARY_IP="$(get_pod_ip "$PRIMARY_SVC_NAME")" \
-                || die "could not resolve pod IP for service $PRIMARY_SVC_NAME via the EndpointSlice API — is the primary release installed and ready?"
+              PRIMARY_IP="$(get_svc_ip "$PRIMARY_SVC_NAME")" \
+                || die "could not resolve the ClusterIP of service $PRIMARY_SVC_NAME — is the primary release installed?"
               PRIMARY_BASE="https://${PRIMARY_IP}:${PRIMARY_HTTPS_PORT}"
 
               echo "==> waiting for primary cluster to be initialized at $PRIMARY_BASE..."

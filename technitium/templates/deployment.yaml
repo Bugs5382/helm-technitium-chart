@@ -46,6 +46,11 @@ spec:
     metadata:
       labels:
         {{- include "technitium.selectorLabels" . | nindent 8 }}
+        {{- with include "technitium.clusterLabels" . | trim }}
+        # Lets cluster.frontService select every node (issue #3). Not part
+        # of the Deployment selector, which stays unchanged.
+        {{- . | nindent 8 }}
+        {{- end }}
       {{- if eq (include "technitium.bootstrapEnabled" .) "true" }}
       annotations:
         # Re-run the zone bootstrap when its zone list or script changes.

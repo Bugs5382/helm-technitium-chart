@@ -271,11 +271,10 @@ bootstrap:
 # in the same namespace) participate in a single Technitium cluster managed
 # from one admin web console. See README.md "Clustering" for the full workflow.
 #
-# Important: clustering is *initialized* and *joined* through the Technitium
-# web admin UI — this chart does not call the cluster API. Enabling this block
-# only (a) adds discovery labels, (b) auto-enables HTTPS with a self-signed
-# cert (DANE-EE requires TLS, and cannot be terminated at a reverse proxy),
-# and (c) prints join instructions in NOTES.txt.
+# Each release is one node, registered with Technitium at its `-web` Service
+# ClusterIP, which does not change when the pod restarts. With autoJoin (the
+# default) the chart initializes and joins the cluster for you; with it off,
+# NOTES.txt prints the manual steps. Clustering needs persistence.
 cluster:
   # Toggle clustering mode for this release.
   enabled: false
@@ -316,6 +315,32 @@ cluster:
   # Optional 6-digit TOTP code for the admin user when joining a cluster.
   # Leave empty unless you've enabled 2FA on the primary's admin account.
   primaryNodeTotp: ""
+
+  # REQUIRED on the primary when autoJoin is on: the pod CIDR(s) of this
+  # Kubernetes cluster, as a list or a comma-separated string. Nodes are
+  # registered at their ClusterIPs, but zone transfers and NOTIFY between
+  # them leave from pod IPs, so the primary sets Technitium's cluster-wide
+  # zoneTransferAllowedNetworks and notifyAllowedNetworks to these networks
+  # (the chart manages both settings). Find yours with, for example,
+  # `kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}'` or your CNI
+  # config (Cilium: cluster-pool-ipv4-cidr). Any pod in these networks can
+  # then transfer every zone without TSIG; see README "NetworkPolicy".
+  # Example:
+  #   podNetworks:
+  #     - 10.244.0.0/16
+  podNetworks: []
+
+  # Optional shared DNS Service in front of every node of the cluster, so
+  # clients keep one address when a node goes down. Rendered by the primary
+  # release only; it selects the pods of every release in this namespace
+  # that carries the same cluster.domain.
+  frontService:
+    enabled: false
+    type: LoadBalancer
+    labels: {}
+    annotations: {}
+    # Set to "Local" to preserve client source IPs.
+    externalTrafficPolicy: ""
 
   # Container image used by the post-install Job that calls the cluster API.
   # Must include `curl` and run as a non-root user. `curlimages/curl` ships
