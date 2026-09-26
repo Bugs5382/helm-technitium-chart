@@ -33,7 +33,7 @@ OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
   traffic to the ClusterIP — the source IP on AXFR/heartbeat connections is
   the pod IP. If the catalog zone allow-list contains a ClusterIP that
   never matches what's on the wire, sync fails. Pod IPs are resolved at
-  runtime via the Kubernetes Endpoints API (RBAC in templates/rbac.yaml).
+  runtime via the Kubernetes EndpointSlice API (RBAC in templates/rbac.yaml).
 */}}
 {{/*
   Install order note: when this is a secondary release, the primary release
@@ -129,33 +129,80 @@ spec:
 
               die() { echo "ERROR: $*" >&2; exit 1; }
 
-              # Pod IP discovery via the Kubernetes Endpoints API. We use the
-              # pod IP (not the Service ClusterIP) because Kubernetes doesn't
-              # NAT outbound pod traffic to the ClusterIP — so the source IP
-              # on Technitium's heartbeat / AXFR connections IS the pod IP,
-              # and that's what must be registered in the cluster zone for
-              # the catalog-zone allow-list to match.
+              log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >&2; }
+
+              # Pod IP discovery via the Kubernetes EndpointSlice API
+              # (discovery.k8s.io/v1). We use the pod IP (not the Service
+              # ClusterIP) because Kubernetes doesn't NAT outbound pod traffic
+              # to the ClusterIP, so the source IP on Technitium's heartbeat /
+              # AXFR connections IS the pod IP, and that's what must be
+              # registered in the cluster zone for the catalog-zone allow-list
+              # to match.
+              #
+              # Issue #33: the old lookup read v1 Endpoints (deprecated since
+              # Kubernetes 1.33) and matched `"ip":"..."` with sed. The API
+              # server pretty-prints JSON for a curl user agent, so the real
+              # body carried `"ip": "..."` and the match never fired. We now
+              # ask for compact output (`pretty=false`) and also strip all
+              # whitespace before parsing, so either format works.
               KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
               KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              KUBE_API="https://kubernetes.default.svc"
+
+              # Print the first ready endpoint address from an EndpointSlice
+              # list on stdin (IPv4 preferred). Each endpoint object starts
+              # with `{"addresses":[...]`, so we split on that and drop any
+              # endpoint whose conditions say `"ready":false` (terminating or
+              # not-yet-ready pods). An absent ready condition means ready,
+              # per the EndpointSlice API contract.
+              pick_ready_ip() {
+                ips="$(tr -d '[:space:]' \
+                  | sed 's/{"addresses":\[/\
+              &/g' \
+                  | grep '^{"addresses":\["' \
+                  | grep -v '"ready":false' \
+                  | sed -n 's/^{"addresses":\["\([^"]*\)".*/\1/p')"
+                v4="$(printf '%s\n' "$ips" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
+                if [ -n "$v4" ]; then printf '%s' "$v4"; return 0; fi
+                printf '%s\n' "$ips" | sed -n '/./{p;q;}'
+              }
 
               get_pod_ip() {
                 svc="$1"
+                url="${KUBE_API}/apis/discovery.k8s.io/v1/namespaces/${NAMESPACE}/endpointslices?labelSelector=kubernetes.io%2Fservice-name%3D${svc}&pretty=false"
+                log "resolving pod IP for service ${svc} via EndpointSlices"
                 tries=0
                 while [ $tries -lt 60 ]; do
-                  ip=$(curl -sS --cacert "$KUBE_CA" \
-                    -H "Authorization: Bearer ${KUBE_TOKEN}" --max-time 5 \
-                    "https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/endpoints/${svc}" \
-                    | sed -n 's/.*"ip":"\([0-9.]*\)".*/\1/p' | head -n1)
+                  tries=$((tries+1))
+                  body="$(curl -sS --cacert "$KUBE_CA" \
+                    -H "Authorization: Bearer ${KUBE_TOKEN}" \
+                    -H "Accept: application/json" --max-time 5 \
+                    -w '\n%{http_code}' "$url" 2>&1)" || {
+                      log "attempt ${tries}/60: request to K8s API failed: $(printf '%s' "$body" | tail -n1)"
+                      sleep 2; continue
+                    }
+                  code="$(printf '%s' "$body" | tail -n1)"
+                  body="$(printf '%s' "$body" | sed '$d')"
+                  if [ "$code" != "200" ]; then
+                    # 403 here means the Role in templates/rbac.yaml is missing
+                    # or not bound to this ServiceAccount.
+                    log "attempt ${tries}/60: K8s API returned HTTP ${code} for endpointslices of ${svc}: $(printf '%s' "$body" | head -c 300)"
+                    sleep 2; continue
+                  fi
+                  ip="$(printf '%s' "$body" | pick_ready_ip)"
                   if [ -n "$ip" ]; then
+                    log "service ${svc} resolved to pod IP ${ip} (attempt ${tries})"
                     printf '%s' "$ip"; return 0
                   fi
-                  tries=$((tries+1)); sleep 2
+                  log "attempt ${tries}/60: no ready endpoint for ${svc} yet"
+                  sleep 2
                 done
+                log "gave up resolving ${svc} after ${tries} attempts"
                 return 1
               }
 
               MY_IP="$(get_pod_ip "$MY_SVC_NAME")" \
-                || die "could not resolve pod IP for endpoints/$MY_SVC_NAME via K8s API"
+                || die "could not resolve pod IP for service $MY_SVC_NAME via the EndpointSlice API"
 
               MY_BASE_HTTPS="https://${MY_IP}:${MY_HTTPS_PORT}"
               MY_BASE_HTTP="http://${MY_IP}:${MY_HTTP_PORT}"
@@ -245,7 +292,7 @@ spec:
 
               # === secondary path ===
               PRIMARY_IP="$(get_pod_ip "$PRIMARY_SVC_NAME")" \
-                || die "could not resolve pod IP for endpoints/$PRIMARY_SVC_NAME via K8s API — is the primary release installed and ready?"
+                || die "could not resolve pod IP for service $PRIMARY_SVC_NAME via the EndpointSlice API — is the primary release installed and ready?"
               PRIMARY_BASE="https://${PRIMARY_IP}:${PRIMARY_HTTPS_PORT}"
 
               echo "==> waiting for primary cluster to be initialized at $PRIMARY_BASE..."
