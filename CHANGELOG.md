@@ -6,6 +6,7 @@
 
 #### 🚀 Features
 
+- feat: register cluster nodes at stable ClusterIPs and allow pod networks @Bugs5382 (#48)
 - feat: run without a PVC, with zone bootstrap on every start @Bugs5382 (#47)
 - feat: add service labels passthrough to the Service templates @Bugs5382 (#40)
 - feat: enforce Recreate update strategy (reject RollingUpdate) @Bugs5382 (#31)
