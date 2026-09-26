@@ -41,11 +41,12 @@ concurrency:
 
 jobs:
   Lint_Testing:
+    name: 🧪 Lint & Test
     uses: ./.github/workflows/action-test.yaml
 
   Update_Draft_Release:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    name: Pre-Release
+    name: 📝 Pre-Release
     needs: Lint_Testing
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -72,14 +73,15 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: 3.x
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # setup-task reads its token from this input, not env. Without it
+          # the release lookup hits the anonymous rate limit.
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release Drafter (Anticipate Version)
         id: drafter
-        uses: release-drafter/release-drafter@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: release-drafter/release-drafter@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Detect releasable changes
         id: releasable
@@ -126,6 +128,7 @@ jobs:
 
   Release:
     if: github.event_name == 'release'
+    name: 🚀 Release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: Lint_Testing
