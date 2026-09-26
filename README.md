@@ -89,6 +89,12 @@ The following table lists the configurable parameters of the Technitium chart an
 | cluster.primaryNodeTotp | TOTP for the primary's admin user when 2FA is enabled. | `""` | No |
 | cluster.jobImage.repository | Image used by the cluster-join Job (must include `curl`, non-root). | `curlimages/curl` | No |
 | cluster.jobImage.tag | Tag for the join-Job image. | `"8.10.1"` | No |
+| cluster.podNetworks | Pod CIDR(s) of the Kubernetes cluster, as a list or a comma-separated string. The primary sets them as Technitium's zone transfer and NOTIFY allowed networks. | `[]` | On the primary with `cluster.autoJoin` |
+| cluster.frontService.enabled | On the primary, add a shared DNS Service in front of every node with the same `cluster.domain`. | `false` | No |
+| cluster.frontService.type | Service type of the shared DNS Service. | `LoadBalancer` | No |
+| cluster.frontService.labels | Extra labels on the shared DNS Service (merged over `service.labels`). | `{}` | No |
+| cluster.frontService.annotations | Annotations on the shared DNS Service (e.g. an LB-IPAM IP). | `{}` | No |
+| cluster.frontService.externalTrafficPolicy | Set to `Local` to preserve client source IPs. | `""` | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
 
@@ -116,8 +122,11 @@ Two (or more) Helm releases of this chart can join a single Technitium cluster �
 
 - **Each release is a node.** Both releases live in the same namespace; resource names are prefixed with `{Release.Name}-technitium-…`, so there are no collisions.
 - **Web service over HTTPS.** Technitium clustering uses DANE-EE for node-to-node TLS, so the web service must be HTTPS and TLS cannot be terminated by a reverse proxy. Setting `cluster.enabled=true` flips on HTTPS with a self-signed certificate automatically.
-- **Stable peer IPs come from the ClusterIP Service.** The cluster zone holds A/TLSA records that point at each peer's ClusterIP — those IPs survive pod restarts. Pod IPs would not.
-- **Automated join via Helm hook.** With `cluster.autoJoin=true` (default), a post-install Job per release calls the Technitium HTTP API: `/api/admin/cluster/init` on the primary, `/api/admin/cluster/initJoin` on each secondary. The Job is idempotent — on re-runs it checks `/api/admin/cluster/state` and exits cleanly if the node is already in the cluster.
+- **Each node is registered at its ClusterIP.** Technitium identifies cluster nodes by IP address. Its clustering guide says: "these IP addresses must be either static or care must be taken to ensure that they do not change later to avoid breaking the cluster unexpectedly." A pod IP changes on every restart, and a Service ClusterIP doesn't. So the chart registers each release's `<release>-technitium-web` ClusterIP, which also serves port 53 in cluster mode. A restarted node comes back at the same address with nothing to re-register.
+- **The pod networks are allowed for zone transfer and NOTIFY.** Traffic that a node starts (AXFR/IXFR, NOTIFY) leaves from its pod IP, not the registered ClusterIP. Left alone, Technitium refuses it, and the secondary's cluster catalog zone never syncs. The primary therefore sets Technitium's cluster-wide `zoneTransferAllowedNetworks` and `notifyAllowedNetworks` to `cluster.podNetworks`, and Technitium copies both settings to every node. This is required on the primary; see [NetworkPolicy](#networkpolicy) for what it opens.
+- **Automated init and join via Helm hook.** With `cluster.autoJoin=true` (default), a post-install/post-upgrade Job per release calls the Technitium HTTP API. On the primary it calls `/api/admin/cluster/init` and then applies the pod-network settings. On each secondary it calls `/api/admin/cluster/initJoin`. The Job finds ClusterIPs through cluster DNS and needs no Kubernetes API access. It is idempotent: on re-runs it checks `/api/admin/cluster/state`, re-applies the pod-network settings on the primary, and exits.
+- **One address for clients (optional).** `cluster.frontService.enabled=true` on the primary adds `<release>-technitium-cluster-dns`, a LoadBalancer on port 53 that selects the pods of every release with the same `cluster.domain`. If one node is down, clients keep getting answers from the others, which hold the same zones.
+- **Each node needs persistence.** A node's cluster membership lives in `/etc/dns`. On an `emptyDir` a replaced pod comes back as a blank server outside the cluster.
 
 ### Install order
 
@@ -132,6 +141,8 @@ config:
   dnsDomain: "<node-shortname>.<cluster.domain>"
 cluster:
   domain: "<cluster.domain>"
+  podNetworks:          # primary only
+    - 10.244.0.0/16     # your cluster's pod CIDR
 ```
 
 For example, with cluster domain `ns.example.local`, the primary uses `dnsDomain: tech-a.ns.example.local` and the secondary uses `dnsDomain: tech-b.ns.example.local`. Using a `dnsDomain` that isn't a subdomain of `cluster.domain` will produce `RemoteCertificateNameMismatch` heartbeat failures.
@@ -160,7 +171,7 @@ After both Jobs report success, log into either web UI (`Administration → Clus
 
 ### Disabling automation
 
-If you'd rather initialize/join clustering by hand from the web UI, set `cluster.autoJoin=false` on both releases. The chart will still apply the discovery labels, enable HTTPS, and print join URLs + ClusterIP lookup commands in `NOTES.txt`.
+If you'd rather initialize/join clustering by hand from the web UI, set `cluster.autoJoin=false` on both releases. The chart will still apply the discovery labels, enable HTTPS, and print join URLs + ClusterIP lookup commands in `NOTES.txt`. Register each node at its web ClusterIP, and on the primary add your pod CIDR under **Settings → Zone Transfer Allowed Networks** and **Notify Allowed Networks**. Without that step the catalog zone does not sync.
 
 ### Discovering cluster members
 
@@ -175,27 +186,17 @@ kubectl -n technitium-test get all -l technitium.io/cluster-domain=ns-example-lo
 - DHCP service clustering is not supported by Technitium yet.
 - Each release is a single-replica `Deployment` with its own PVC — scaling beyond 1 replica per release is out of scope; clustering across multiple releases is the supported topology.
 
-### Known limitation: cluster config sync (catalog zone) fails on Kubernetes
+### Failover
 
-Joining works (`cluster.autoJoin` Job calls `/api/admin/cluster/initJoin` successfully), but **ongoing config sync between nodes doesn't**, because of a fundamental impedance mismatch between Technitium's IP-based cluster identity and Kubernetes pod networking:
+Every node answers DNS for the zones in the cluster catalog, so with `cluster.frontService` a node going down only removes one endpoint from the Service. Configuration changes, however, can only be made on the primary. Technitium has no automatic primary election; its guide describes "an option available to promote a secondary node to become a primary node in case when the primary node is offline and unrecoverable" (**Administration → Cluster** on the secondary). The chart does not automate promotion.
 
-- At join time the chart registers each release's **web Service ClusterIP** with Technitium (since pod IPs are ephemeral).
-- Technitium's primary catalog zone (`cluster-catalog.<cluster.domain>`) automatically restricts AXFR/IXFR to the IPs registered for each cluster member.
-- But when a pod in Kubernetes initiates an outbound DNS zone transfer, the **source IP on the wire is the pod IP**, not the Service ClusterIP it ostensibly "owns". The two don't match, so the primary refuses the zone transfer:
+### NetworkPolicy
 
-  ```
-  DNS Server refused a zone transfer request since the request IP address
-  is not allowed by the zone: cluster-catalog.ns.example.local
-  ```
+`cluster.podNetworks` lets any pod in those networks transfer every zone (AXFR) and send NOTIFY to every node without TSIG. On a shared cluster, restrict port 53 on the Technitium pods with a NetworkPolicy, so only the nodes themselves and your intended clients can reach it. For example, allow TCP/UDP 53 from pods labelled `technitium.io/cluster-domain=<domain>` and from your client namespaces. Keep the web ports (5380/53443) limited to the nodes and the namespaces that need the admin API, such as the external-dns webhook. A NetworkPolicy needs a CNI that enforces it (Cilium, Calico and others do).
 
-- Without the catalog zone, the secondary never receives the TLSA records the primary publishes for each node. DANE-EE on the heartbeat path therefore has nothing to validate against and falls back to PKIX, which fails for the auto-generated self-signed cert with `UntrustedRoot`. From the secondary's view the primary stays `Unreachable`.
+### Background
 
-Workarounds that *do* work but are out of the chart's scope today:
-
-1. **Match outbound to inbound.** Use a CNI / Service config that NAT-sources pod traffic to the Service ClusterIP (e.g. `service.kubernetes.io/topology-mode: PreferLocal` plus a Cilium / kube-router SNAT, or a sidecar that does the rewrite). Once outbound AXFR comes from the registered ClusterIP, zone transfer succeeds, TLSA syncs, DANE-EE validates.
-2. **Provide a real cert from a shared CA.** Issue per-node certs from a CA whose root is in both pods' trust stores. PKIX then succeeds without needing DANE-EE / TLSA records at all. Doesn't fix catalog *content* sync, but takes the heartbeat failure off the critical path.
-
-We previously misdiagnosed this as a missing flag in Technitium's heartbeat path. The upstream PR ([TechnitiumSoftware/DnsServer#1921](https://github.com/TechnitiumSoftware/DnsServer/pull/1921)) was correctly closed by the maintainer — DANE-EE *is* enabled on the heartbeat path; the issue is that the chart never gives the secondary's catalog zone a chance to sync. The full diagnosis trail lives in [`docs/upstream-pr.md`](docs/upstream-pr.md).
+Earlier chart versions registered the pod IP, which broke the cluster whenever a pod restarted. Earlier still, they registered the ClusterIP without allowing the pod networks, and catalog zone transfers were refused. [`docs/upstream-pr.md`](docs/upstream-pr.md) keeps the diagnosis trail.
 
 ## 🌐 Ingress
 

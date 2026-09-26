@@ -46,6 +46,11 @@ spec:
     metadata:
       labels:
         {{- include "technitium.selectorLabels" . | nindent 8 }}
+        {{- with include "technitium.clusterLabels" . | trim }}
+        # Lets cluster.frontService select every node (issue #3). Not part
+        # of the Deployment selector, which stays unchanged.
+        {{- . | nindent 8 }}
+        {{- end }}
     spec:
       serviceAccountName: {{ include "technitium.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}

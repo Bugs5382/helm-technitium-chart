@@ -55,3 +55,8 @@ cluster:
   primaryReleaseName: ""
   autoHttps: true
   autoJoin: true
+  # Pod CIDR of the Kubernetes cluster (kind and k0s default shown). The
+  # primary allows zone transfers and NOTIFY from these networks, because
+  # traffic between nodes leaves from pod IPs, not the registered ClusterIPs.
+  podNetworks:
+    - 10.244.0.0/16

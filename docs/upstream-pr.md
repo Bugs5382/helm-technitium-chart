@@ -9,6 +9,17 @@ note records the real cause so future readers don't repeat the mistake.
 [pr]: https://github.com/TechnitiumSoftware/DnsServer/pull/1921
 [cmt]: https://github.com/TechnitiumSoftware/DnsServer/pull/1921#issuecomment-4418573460
 
+## Resolution (issue #3)
+
+The chart now does what Technitium expects and needs no upstream change:
+
+- **Stable node addresses.** Each node is registered at its web Service ClusterIP. Technitium's clustering guide asks for static node IPs, and a ClusterIP survives pod restarts. Registering the pod IP, as one chart version did, broke the cluster on every restart.
+- **Allow the pod networks.** The primary sets the cluster-wide settings `zoneTransferAllowedNetworks` and `notifyAllowedNetworks` to `cluster.podNetworks`. Transfers and NOTIFY that leave from a pod IP are then accepted, the catalog zone syncs, the TLSA records arrive, and DANE-EE validates the heartbeat.
+
+Both settings are documented "cluster parameters", so Technitium copies them to every node. The same fix was reported upstream: in TechnitiumSoftware/DnsServer issue 1790 ("Incoming vs Outgoing IP address issue with clustering on Kubernetes"), the Notify Allowed Networks setting resolved it. In issue 1578 the maintainer points at an unsynced catalog zone, and a reporter traced that to a "catalog zone transfer source-IP mismatch".
+
+The sections below are the original diagnosis, kept for history.
+
 ## What I thought was wrong
 
 `ClusterNode.GetApiClient()` at `DnsServerCore/Cluster/ClusterNode.cs:196`
