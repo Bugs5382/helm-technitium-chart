@@ -155,9 +155,21 @@ spec:
               # nslookup in the Job image). The ClusterIP is this node's stable
               # cluster address (issue #3); it does not change when the pod
               # restarts, unlike the pod IP the chart used to register.
+              # busybox nslookup does not apply the resolv.conf search path, so
+              # build the FQDN from the pod's first search domain, which is
+              # "<namespace>.svc.<cluster-domain>" on Kubernetes. This keeps
+              # clusters with a non-default cluster domain working.
+              SVC_SUFFIX="$(sed -n 's/^search[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' /etc/resolv.conf | head -n1)"
+              case "$SVC_SUFFIX" in
+                "${NAMESPACE}.svc."*) : ;;
+                *) log "resolv.conf search domain '${SVC_SUFFIX}' is not '${NAMESPACE}.svc.*'; assuming cluster.local"
+                   SVC_SUFFIX="${NAMESPACE}.svc.cluster.local" ;;
+              esac
+              log "service DNS suffix: ${SVC_SUFFIX}"
+
               get_svc_ip() {
                 svc="$1"
-                fqdn="${svc}.${NAMESPACE}.svc"
+                fqdn="${svc}.${SVC_SUFFIX}"
                 log "resolving ClusterIP of service ${fqdn}"
                 tries=0
                 while [ $tries -lt 60 ]; do
