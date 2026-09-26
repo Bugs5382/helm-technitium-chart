@@ -8,6 +8,10 @@
 
 - feat: enforce Recreate update strategy (reject RollingUpdate) @Bugs5382 (#31)
 
+#### 🐛 Bug Fixes
+
+- fix(cluster-join): resolve pod IPs through EndpointSlices @Bugs5382 (#39)
+
 #### 📄 Documentation
 
 - docs(readme): apply the lite emoji treatment @Bugs5382 (#36)
