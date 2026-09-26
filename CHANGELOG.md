@@ -18,6 +18,10 @@
 
 - docs(readme): apply the lite emoji treatment @Bugs5382 (#36)
 
+#### 🧩 Dependency Updates
+
+- chore(deps): bump Technitium DNS Server to 15.5.1 @Bugs5382 (#46)
+
 ### Extra
 
 **Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.2.0...v0.3.0
