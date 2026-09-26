@@ -213,7 +213,16 @@ spec:
               mountPath: /var/log/technitium
       volumes:
         - name: config-storage
+          {{- if eq (include "technitium.persistenceEnabled" .) "true" }}
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.existingClaim | default (printf "%s-config-pvc" (include "technitium.fullname" .)) }}
+          {{- else }}
+          # persistence.enabled=false (issue #43): config is lost on restart.
+          emptyDir:
+            {{- with (.Values.persistence.emptyDir | default dict).sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- else }} {}
+            {{- end }}
+          {{- end }}
         - name: logs
           emptyDir: {}

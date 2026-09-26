@@ -20,6 +20,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */}}
+{{- /* Issue #43: no PVC when persistence is off or an existing claim is used. */}}
+{{- if and (eq (include "technitium.persistenceEnabled" .) "true") (not (.Values.persistence | default dict).existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -35,3 +37,4 @@ spec:
   {{ if .Values.persistence.storageClass }}
   storageClassName: {{ (index .Values "persistence" | default dict).storageClass | default "" }}
   {{ end }}
+{{- end }}

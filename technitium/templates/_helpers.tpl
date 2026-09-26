@@ -89,6 +89,18 @@ technitium.io/cluster-role: {{ ternary "secondary" "primary" (ne (.Values.cluste
 {{- end }}
 
 {{/*
+Persistence toggle (issue #43). `persistence` defaults to `{}`, so an unset
+`enabled` means true; only an explicit `false` turns the PVC off. Returns
+"true" or "".
+*/}}
+{{- define "technitium.persistenceEnabled" -}}
+{{- $p := .Values.persistence | default dict -}}
+{{- if or (not (hasKey $p "enabled")) $p.enabled -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
 Effective HTTPS toggle. Clustering needs DANE-EE TLS on the web service, so
 cluster.enabled + cluster.autoHttps implies HTTPS even if the user did not
 explicitly opt in via config.webServiceEnableHttps.

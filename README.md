@@ -67,10 +67,12 @@ The following table lists the configurable parameters of the Technitium chart an
 | resources | Resource requests and limits for the container. | `{}` | No |
 | securityContext | Security context for the container. | `{}` | No |
 | **Persistence** | | | |
+| persistence.enabled | Create/mount a PVC for `/etc/dns`. Set `false` for throwaway installs: an `emptyDir` is used and all config and zones are lost when the pod restarts. | `true` | No |
+| persistence.emptyDir.sizeLimit | Size limit for the `emptyDir` used when `persistence.enabled` is `false`. | unset | No |
 | persistence.size | Size of the persistent volume claim. | `2Gi` | No |
 | persistence.storageClass | StorageClass for the PVC (empty = cluster default). | `""` | No |
 | persistence.accessModes | List of access modes for the PVC. | `[ReadWriteOnce]` | No |
-| persistence.existingClaim | Use a pre-existing PVC instead of creating one. | `""` | No |
+| persistence.existingClaim | Use a pre-existing PVC instead of creating one (the chart then creates no PVC). | `""` | No |
 | **Clustering** | | | |
 | cluster.enabled | Participate in a Technitium cluster (see Clustering section below). | `false` | No |
 | cluster.domain | Shared cluster zone name; must be identical on every node. | `""` | If `cluster.enabled` |

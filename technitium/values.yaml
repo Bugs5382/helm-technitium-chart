@@ -207,14 +207,22 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
-# Persistence configuration for the Technitium data volume.
+# Persistence configuration for the Technitium data volume (/etc/dns).
 # Example:
 # persistence:
+#   # Set to false to skip the PVC and use an emptyDir instead. The config,
+#   # zones and admin state are then LOST whenever the pod restarts; only
+#   # use this for throwaway installs (CI, test namespaces).
+#   enabled: true
 #   size: 2Gi
 #   storageClass: ""
 #   accessModes:
 #     - ReadWriteOnce
+#   # Mount this pre-existing PVC instead of creating one.
 #   existingClaim: ""
+#   # Only used when enabled is false.
+#   emptyDir:
+#     sizeLimit: 64Mi
 persistence: {}
 
 # Technitium clustering. Lets two or more independent Helm releases (typically
