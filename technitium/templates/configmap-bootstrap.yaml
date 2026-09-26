@@ -20,21 +20,28 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */}}
-{{- /* Issue #43: no PVC when persistence is off or an existing claim is used. */}}
-{{- if and (eq (include "technitium.persistenceEnabled" .) "true") (not (.Values.persistence | default dict).existingClaim) }}
+{{- /* Zone bootstrap inputs and script (issue #43). See files/bootstrap.sh. */}}
+{{- if eq (include "technitium.bootstrapEnabled" .) "true" }}
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ConfigMap
 metadata:
-  name: {{ include "technitium.fullname" . }}-config-pvc
+  name: {{ include "technitium.fullname" . }}-bootstrap
   labels:
     {{- include "technitium.labels" . | nindent 4 }}
-spec:
-  accessModes:
-    {{- toYaml ((index .Values "persistence" | default dict).accessModes | default (list "ReadWriteOnce")) | nindent 4 }}
-  resources:
-    requests:
-      storage:  {{ (index .Values "persistence" | default dict).size | default "2Gi" }}
-  {{ if .Values.persistence.storageClass }}
-  storageClassName: {{ (index .Values "persistence" | default dict).storageClass | default "" }}
-  {{ end }}
+    app.kubernetes.io/component: bootstrap
+data:
+  bootstrap.sh: |
+    {{- .Files.Get "files/bootstrap.sh" | nindent 4 }}
+  zones: |
+    {{- range .Values.bootstrap.zones }}
+    {{- if kindIs "string" . }}
+    {{ . }} Primary
+    {{- else }}
+    {{ required "bootstrap.zones[].name is required" .name }} {{ .type | default "Primary" }}
+    {{- end }}
+    {{- end }}
+  reverse-zones: |
+    {{- range .Values.bootstrap.reverseZones }}
+    {{ . }}
+    {{- end }}
 {{- end }}

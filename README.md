@@ -75,10 +75,12 @@ The following table lists the configurable parameters of the Technitium chart an
 | resources | Resource requests and limits for the container. | `{}` | No |
 | securityContext | Security context for the container. | `{}` | No |
 | **Persistence** | | | |
+| persistence.enabled | Create/mount a PVC for `/etc/dns`. Set `false` to use an `emptyDir`: everything in `/etc/dns` is lost when the pod is replaced (see Running without persistence). | `true` | No |
+| persistence.emptyDir.sizeLimit | Size limit for the `emptyDir` used when `persistence.enabled` is `false`. | unset | No |
 | persistence.size | Size of the persistent volume claim. | `2Gi` | No |
 | persistence.storageClass | StorageClass for the PVC (empty = cluster default). | `""` | No |
 | persistence.accessModes | List of access modes for the PVC. | `[ReadWriteOnce]` | No |
-| persistence.existingClaim | Use a pre-existing PVC instead of creating one. | `""` | No |
+| persistence.existingClaim | Use a pre-existing PVC instead of creating one (the chart then creates no PVC). | `""` | No |
 | **Clustering** | | | |
 | cluster.enabled | Participate in a Technitium cluster (see Clustering section below). | `false` | No |
 | cluster.domain | Shared cluster zone name; must be identical on every node. | `""` | If `cluster.enabled` |
@@ -89,8 +91,58 @@ The following table lists the configurable parameters of the Technitium chart an
 | cluster.primaryNodeTotp | TOTP for the primary's admin user when 2FA is enabled. | `""` | No |
 | cluster.jobImage.repository | Image used by the cluster-join Job (must include `curl`, non-root). | `curlimages/curl` | No |
 | cluster.jobImage.tag | Tag for the join-Job image. | `"8.10.1"` | No |
+| **Zone Bootstrap** | | | |
+| bootstrap.enabled | Create the listed zones on every pod start if they are missing. | `true` | No |
+| bootstrap.zones | Forward zones: a name, or `{name, type}` (type defaults to `Primary`). | `[]` | No |
+| bootstrap.reverseZones | Reverse zones: IPv4 CIDRs (expanded at the next octet boundary) or explicit `.arpa` names. | `[]` | No |
+| bootstrap.image.repository | Image for the bootstrap sidecar (must include `curl`, non-root). | `curlimages/curl` | No |
+| bootstrap.image.tag | Tag for the bootstrap sidecar image. | `"8.10.1"` | No |
+| bootstrap.resources | Resources for the bootstrap sidecar. | 5m/8Mi requests, 100m/32Mi limits | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
+
+## 💾 Running without persistence
+
+`persistence.enabled: false` is a supported mode, not only a test setting. When external-dns owns your records, it writes them back on its next sync, so the PVC is optional. The pod mounts an `emptyDir` at `/etc/dns`, and every time the pod is replaced Technitium starts as a blank server. The chart puts back what external-dns needs before it can write:
+
+- **Admin login.** On a blank start Technitium sets the `admin` password from the chart's `<release>-technitium-admin` Secret. That Secret keeps its value across upgrades, so the same password works after every restart.
+- **Zones.** The `bootstrap` sidecar creates every zone in `bootstrap.zones` and `bootstrap.reverseZones` that doesn't exist yet, then idles. It runs on every pod start, leaves existing zones alone, and logs each zone as created or already there (`kubectl logs <pod> -c bootstrap`). An API error exits non-zero, so the sidecar restarts and the failure shows up in the logs and the restart count.
+
+Point the external-dns webhook at the admin password, not an API token. Tokens created in the web UI live in `/etc/dns` and are gone after a restart. Technitium's `DNS_SERVER_AUTH_STATIC_SESSIONS` is also skipped on a blank start: it only loads once an `auth.config` already exists.
+
+```yaml
+# Webhook sidecar env (external-dns-technitium-webhook)
+- name: TECHNITIUM_USER
+  value: admin
+- name: TECHNITIUM_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: <release>-technitium-admin
+      key: password
+```
+
+Example values for a home-lab network where external-dns manages `local.therabbithole.com` and PTR records for `10.110.0.0/19`:
+
+```yaml
+persistence:
+  enabled: false
+  emptyDir:
+    sizeLimit: 64Mi
+
+bootstrap:
+  zones:
+    - local.therabbithole.com
+  reverseZones:
+    - 10.110.0.0/19   # becomes 0.110.10.in-addr.arpa through 31.110.10.in-addr.arpa
+```
+
+What does **not** come back after a restart, because external-dns doesn't manage it:
+
+- Zones and records created by hand, unless they are listed under `bootstrap`. Records in bootstrap zones return only when external-dns writes them.
+- Settings changed in the web UI: forwarders, blocklists, recursion, logging, users, groups, API tokens and DNS apps. Set what the chart exposes through `config.*` (`forwarders`, `blockListUrls`, `recursion`, and so on); those are applied on every start.
+- Query logs, dashboard stats and the cache.
+
+**Clustering needs persistence.** A clustered node on an `emptyDir` comes back as a blank server that is no longer in the cluster, and the join Job only runs on `helm install`/`upgrade`. Keep `persistence.enabled: true` for every release in a cluster.
 
 ## 🔖 Versioning & Releases
 

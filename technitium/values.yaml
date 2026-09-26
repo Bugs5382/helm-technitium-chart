@@ -218,15 +218,54 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
-# Persistence configuration for the Technitium data volume.
+# Persistence configuration for the Technitium data volume (/etc/dns).
 # Example:
 # persistence:
+#   # Set to false to skip the PVC and use an emptyDir instead. Everything in
+#   # /etc/dns is lost when the pod is replaced; the admin password (from the
+#   # chart Secret) and the `bootstrap` zones come back on every start, and
+#   # external-dns rewrites its records. See README "Running without
+#   # persistence". Clustering needs persistence.
+#   enabled: true
 #   size: 2Gi
 #   storageClass: ""
 #   accessModes:
 #     - ReadWriteOnce
+#   # Mount this pre-existing PVC instead of creating one.
 #   existingClaim: ""
+#   # Only used when enabled is false.
+#   emptyDir:
+#     sizeLimit: 64Mi
 persistence: {}
+
+# Zones created on every pod start if they are missing (issue #43). Existing
+# zones are left alone, so this is safe with or without persistence. Runs in
+# a small `bootstrap` sidecar; on a cluster it runs on the primary only and
+# the zones join the cluster catalog.
+bootstrap:
+  enabled: true
+  # Forward zones: a name, or {name, type} (type defaults to Primary).
+  # Example:
+  #   zones:
+  #     - local.example.com
+  #     - name: lab.example.com
+  #       type: Primary
+  zones: []
+  # Reverse (PTR) zones: IPv4 CIDRs, expanded to in-addr.arpa zones at the
+  # next octet boundary (10.110.0.0/19 -> 0-31.110.10.in-addr.arpa), or
+  # explicit .arpa names (use these for IPv6).
+  reverseZones: []
+  image:
+    repository: curlimages/curl
+    tag: "8.10.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 5m
+      memory: 8Mi
+    limits:
+      cpu: 100m
+      memory: 32Mi
 
 # Technitium clustering. Lets two or more independent Helm releases (typically
 # in the same namespace) participate in a single Technitium cluster managed
