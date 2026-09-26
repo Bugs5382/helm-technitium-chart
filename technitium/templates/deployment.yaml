@@ -51,6 +51,11 @@ spec:
         # of the Deployment selector, which stays unchanged.
         {{- . | nindent 8 }}
         {{- end }}
+      {{- if eq (include "technitium.bootstrapEnabled" .) "true" }}
+      annotations:
+        # Re-run the zone bootstrap when its zone list or script changes.
+        checksum/bootstrap: {{ include (print $.Template.BasePath "/configmap-bootstrap.yaml") . | sha256sum }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "technitium.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
@@ -216,9 +221,66 @@ spec:
               mountPath: /etc/dns
             - name: logs
               mountPath: /var/log/technitium
+        {{- if eq (include "technitium.bootstrapEnabled" .) "true" }}
+        {{- $b := .Values.bootstrap }}
+        # Zone bootstrap (issue #43): creates any missing bootstrap zones on
+        # every pod start, then idles. A failure exits non-zero, so the
+        # container restarts and the error stays in its logs.
+        - name: bootstrap
+          image: "{{ $b.image.repository }}:{{ $b.image.tag }}"
+          imagePullPolicy: {{ $b.image.pullPolicy | default "IfNotPresent" }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - sh /bootstrap/bootstrap.sh && exec sh -c 'trap "exit 0" TERM; while :; do sleep 3600 & wait $!; done'
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          {{- with $b.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: API_BASE
+              value: "http://127.0.0.1:{{ .Values.ports.webHttp | default 5380 }}"
+            - name: ADMIN_USER
+              value: {{ .Values.cluster.adminUsername | default "admin" | quote }}
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "technitium.fullname" . }}-admin
+                  key: password
+            {{- if .Values.cluster.enabled }}
+            - name: CATALOG
+              value: "cluster-catalog.{{ .Values.cluster.domain }}"
+            - name: WAIT_FOR_CLUSTER
+              value: "true"
+            {{- end }}
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+        {{- end }}
       volumes:
+        {{- if eq (include "technitium.bootstrapEnabled" .) "true" }}
+        - name: bootstrap
+          configMap:
+            name: {{ include "technitium.fullname" . }}-bootstrap
+        {{- end }}
         - name: config-storage
+          {{- if eq (include "technitium.persistenceEnabled" .) "true" }}
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.existingClaim | default (printf "%s-config-pvc" (include "technitium.fullname" .)) }}
+          {{- else }}
+          # persistence.enabled=false (issue #43): config is lost on restart.
+          emptyDir:
+            {{- with (.Values.persistence.emptyDir | default dict).sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- else }} {}
+            {{- end }}
+          {{- end }}
         - name: logs
           emptyDir: {}

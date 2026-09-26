@@ -36,6 +36,12 @@
 
    List all sibling cluster members in the namespace:
      kubectl get svc --namespace {{ .Release.Namespace }} -l technitium.io/cluster-domain={{ .Values.cluster.domain | replace "." "-" | trunc 63 | trimSuffix "-" }}
+{{- if ne (include "technitium.persistenceEnabled" .) "true" }}
+
+   ⚠️  persistence.enabled is false: this node loses its cluster membership
+   whenever the pod is replaced and must be joined again. Clustering needs
+   persistence; see README "Running without persistence".
+{{- end }}
 
 {{- if .Values.cluster.autoJoin }}
 
