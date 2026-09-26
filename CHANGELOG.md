@@ -6,6 +6,7 @@
 
 #### 🚀 Features
 
+- feat: add service labels passthrough to the Service templates @Bugs5382 (#40)
 - feat: enforce Recreate update strategy (reject RollingUpdate) @Bugs5382 (#31)
 
 #### 🐛 Bug Fixes
