@@ -63,6 +63,14 @@ The following table lists the configurable parameters of the Technitium chart an
 | ingress.enabled | Toggle for the bundled ingress template. | `false` | No |
 | ingress.className | IngressClass name (e.g. `"nginx"`, `"traefik"`). | `""` | No |
 | ingress.annotations | Annotations to add to the ingress resource. | `{}` | No |
+| service.labels | Extra labels on both Services (e.g. `lb-pool: aws` for a Cilium LB-IPAM `serviceSelector`). Chart-managed keys cannot be overridden. | `{}` | No |
+| service.web.type | Service type for the web console Service. | `ClusterIP` | No |
+| service.web.labels | Extra labels on the web Service only, merged over `service.labels`. | `{}` | No |
+| service.web.annotations | Annotations on the web Service. | `{}` | No |
+| service.dns.type | Service type for the DNS Service. | `LoadBalancer` | No |
+| service.dns.labels | Extra labels on the DNS Service only, merged over `service.labels`. | `{}` | No |
+| service.dns.annotations | Annotations on the DNS Service. | `{}` | No |
+| service.dns.externalTrafficPolicy | Set to `Local` to preserve client source IPs. | `""` | No |
 | **Workload** | | | |
 | resources | Resource requests and limits for the container. | `{}` | No |
 | securityContext | Security context for the container. | `{}` | No |

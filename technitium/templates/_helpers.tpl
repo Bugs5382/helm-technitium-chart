@@ -101,6 +101,34 @@ true
 {{- end }}
 
 {{/*
+User-supplied Service labels (issue #32), for label-selecting controllers
+such as Cilium LB-IPAM `serviceSelector`. Merges `service.labels` (every
+Service) with the per-Service map passed as `labels` (per-Service wins).
+Keys the chart already sets on the Service are rejected rather than
+silently dropped or duplicated. Values are rendered as quoted strings,
+since Kubernetes label values must be strings.
+Call with: dict "root" $ "labels" .Values.service.<svc>.labels
+*/}}
+{{- define "technitium.serviceExtraLabels" -}}
+{{- $root := .root -}}
+{{- $reserved := include "technitium.labels" $root | fromYaml -}}
+{{- $_ := set $reserved "app.kubernetes.io/component" "" -}}
+{{- $extra := dict -}}
+{{- range $k, $v := ($root.Values.service.labels | default dict) }}
+{{- $_ := set $extra $k $v }}
+{{- end }}
+{{- range $k, $v := (.labels | default dict) }}
+{{- $_ := set $extra $k $v }}
+{{- end }}
+{{- range $k, $v := $extra }}
+{{- if hasKey $reserved $k }}
+{{- fail (printf "service labels: %q is set by the chart and cannot be overridden" $k) }}
+{{- end }}
+{{ $k }}: {{ $v | toString | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
 Effective HTTPS toggle. Clustering needs DANE-EE TLS on the web service, so
 cluster.enabled + cluster.autoHttps implies HTTPS even if the user did not
 explicitly opt in via config.webServiceEnableHttps.
