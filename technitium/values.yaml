@@ -151,15 +151,26 @@ ingress:
 # behind an Ingress / reverse proxy with TLS while the DNS protocol
 # ports are exposed directly via a LoadBalancer (or NodePort, etc.).
 service:
+  # Extra labels added to BOTH Services' metadata, on top of the chart's own
+  # labels. Useful for label-selecting controllers, e.g. a Cilium LB-IPAM
+  # pool `serviceSelector`. Keys the chart already sets cannot be overridden.
+  # Example:
+  #   labels:
+  #     lb-pool: aws
+  labels: {}
   # Service for the web management console and DoH HTTP proxy ports.
   # Defaults to ClusterIP so it can be fronted by `ingress` with TLS.
   web:
     type: ClusterIP
+    # Extra labels for the web Service only (merged over service.labels).
+    labels: {}
     annotations: {}
   # Service for the DNS protocol ports (53, DoT, DoQ, direct DoH, DHCP).
   # Defaults to LoadBalancer so DNS clients get a stable external IP.
   dns:
     type: LoadBalancer
+    # Extra labels for the DNS Service only (merged over service.labels).
+    labels: {}
     annotations: {}
     # Set to "Local" to preserve client source IPs (useful for ACLs).
     externalTrafficPolicy: ""
