@@ -1,12 +1,16 @@
 # Helm Technitium Chart
 
-## v0.3.0 - 2026-06-21
+## v0.3.0 - 2026-09-26
 
 ### What Changed 👀
 
 #### 🚀 Features
 
 - feat: enforce Recreate update strategy (reject RollingUpdate) @Bugs5382 (#31)
+
+#### 📄 Documentation
+
+- docs(readme): apply the lite emoji treatment @Bugs5382 (#36)
 
 ### Extra
 
