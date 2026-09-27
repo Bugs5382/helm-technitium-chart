@@ -19,13 +19,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 name: YamlLint
+# Pull requests only, and not while the PR is a draft; the PR run covers what
+# merges, so nothing reruns on push to main.
 on:
-  push:
-    paths-ignore:
-      - '**.md'
   pull_request:
     branches:
       - main
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -34,7 +34,9 @@ concurrency:
 jobs:
   lint:
     name: YamlLint
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:

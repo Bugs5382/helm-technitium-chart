@@ -19,13 +19,17 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 name: GoLic
+# Verify the chart templates and YAML files carry the MIT license header
+# (.licignore and .golic.yaml pick the files). `golic inject -x` exits non-zero
+# when a file was missing its header.
+#
+# Pull requests only, and not while the PR is a draft; the PR run covers what
+# merges, so nothing reruns on push to main.
 on:
-  push:
-    paths-ignore:
-      - '**.md'
   pull_request:
     branches:
       - main
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -34,12 +38,16 @@ concurrency:
 jobs:
   GoLic:
     name: GoLic
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
       - name: GoLic
         run: |
-          export PATH=${PATH}:`go env GOPATH`/bin
+          # Assign first, then export, so a failing `go env` is not masked.
+          gobin="$(go env GOPATH)/bin"
+          export PATH="${PATH}:${gobin}"
           go install github.com/Bugs5382/golic/cmd/golic@v0.2.0
           golic inject -t mit -c "2026 Shane & Contributors" -x
