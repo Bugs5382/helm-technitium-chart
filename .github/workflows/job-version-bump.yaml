@@ -40,14 +40,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Lint & Test gates the publish only. A push to main needs no rerun: the PR
+  # run already tested the tree the squash merge lands, so the pre-release prep
+  # goes straight ahead.
   Lint_Testing:
     name: 🧪 Lint & Test
+    if: github.event_name == 'release'
     uses: ./.github/workflows/action-test.yaml
 
   Update_Draft_Release:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     name: 📝 Pre-Release
-    needs: Lint_Testing
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

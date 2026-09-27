@@ -38,6 +38,7 @@ on:
         default: true
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/scripts/technitium-version*.sh'
       - '.github/workflows/job-technitium-bump.yaml'
@@ -52,6 +53,8 @@ permissions:
 jobs:
   test:
     name: 🧪 Test Version Script
+    # Draft PRs are skipped; the schedule and manual runs always test first.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

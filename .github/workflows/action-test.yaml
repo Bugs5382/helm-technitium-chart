@@ -19,6 +19,11 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 name: Lint_and_Test
+# Helm lint, a dry run, and a real install on a kind cluster.
+#
+# Pull requests only, and not while the PR is a draft: the PR run covers what
+# merges, so nothing reruns on push to main. The job still runs for
+# workflow_dispatch and when the Release Manager calls it before a publish.
 
 on:
   workflow_dispatch:
@@ -31,11 +36,6 @@ on:
       - ready_for_review
     branches:
       - main
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -44,6 +44,7 @@ concurrency:
 jobs:
   Lint_and_Test:
     name: 🧪 Lint & Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
