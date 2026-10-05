@@ -4,16 +4,28 @@
 
 ## 🚀 Quick Start
 
-To install the chart with the release name `my-dns`:
+To install the chart with the release name `technitium` from the Helm repository on GitHub Pages:
 
 ```bash
 kubectl create namespace technitium
 
-helm install technitium technitium \
+helm repo add technitium https://bugs5382.github.io/helm-technitium-chart
+helm install technitium technitium/technitium \
   --set config.dnsDomain="dns-server" \
   --set persistence.storageClass="longhorn-static" \
   --namespace technitium
 ```
+
+Or straight from the OCI registry on ghcr.io:
+
+```bash
+helm install technitium oci://ghcr.io/bugs5382/charts/technitium --version <version> \
+  --set config.dnsDomain="dns-server" \
+  --set persistence.storageClass="longhorn-static" \
+  --namespace technitium
+```
+
+Each published release ships the same chart to both.
 
 ## ⚙️ Configuration
 

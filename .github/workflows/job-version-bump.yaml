@@ -167,6 +167,18 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
+      # Same tarball as the GitHub Pages repository, so both install paths
+      # serve identical charts: ghcr.io/bugs5382/charts/technitium.
+      - name: Push Chart to ghcr.io (OCI)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for chart in .cr-release-packages/*.tgz; do
+            helm push "$chart" oci://ghcr.io/bugs5382/charts
+          done
+
       - name: Install chart-releaser
         run: |
           gh release download \
