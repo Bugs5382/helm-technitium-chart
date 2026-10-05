@@ -1,5 +1,17 @@
 # Helm Technitium Chart
 
+## v0.4.0 - 2026-10-05
+
+### What Changed 👀
+
+#### 🚀 Features
+
+- feat(publish): push the chart to ghcr.io as an OCI artifact on release @Bugs5382 (#55)
+
+### Extra
+
+**Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.3.0...v0.4.0
+
 ## v0.3.0 - 2026-09-26
 
 ### What Changed 👀
