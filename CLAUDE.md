@@ -55,6 +55,10 @@ fast during a wave of PRs. The shipped workflows are shaped around that:
   pre-release prep on push, and the chart publish on a published release, which runs Lint & Test
   first. The Technitium Version Tracker keeps its daily schedule, and its script tests also run on
   PRs that touch the script.
+- **Tracker identity:** the Technitium Version Tracker opens its PR with the release GitHub App token,
+  but files and edits its issue with the maintainer's fine-grained token in the `ISSUE_TOKEN`
+  repository secret (Issues: read and write, this repo only), so the issue shows the owner as its
+  author. When the secret is empty it falls back to the app token.
 - **Keep the PR run honest:** the PR run covers the merged code only when the branch is up to date
   with `main` before it merges. In the branch ruleset, add **Require status checks to pass** with
   the repo's check names and turn on **Require branches to be up to date before merging** (API:

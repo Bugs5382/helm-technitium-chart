@@ -53,6 +53,12 @@ check "older major" older "$(cmp 14.3.0 15.0.0)"
 check "compare rejects latest" error "$(cmp latest 15.2.0)"
 check "compare rejects pre-release" error "$(cmp 15.6.0-beta 15.2.0)"
 
+# issue-token: issues are filed as the maintainer when ISSUE_GH_TOKEN is set
+itok() { env -u ISSUE_GH_TOKEN -u GH_TOKEN "$@" bash "$script" issue-token 2>/dev/null || echo error; }
+check "issue token prefers ISSUE_GH_TOKEN" maint "$(itok ISSUE_GH_TOKEN=maint GH_TOKEN=app)"
+check "issue token falls back to GH_TOKEN" app "$(itok GH_TOKEN=app)"
+check "issue token errors when neither is set" error "$(itok)"
+
 # is-stable
 check "stable three-part" yes "$(stable 15.5.1)"
 check "stable two-part" yes "$(stable 13.1)"
