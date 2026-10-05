@@ -87,6 +87,8 @@ jobs:
       - name: Check for a new release and open the bump
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Issues are filed as the maintainer; empty falls back to the app token.
+          ISSUE_GH_TOKEN: ${{ secrets.ISSUE_TOKEN }}
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
           GITHUB_ACTOR_ID: ${{ github.actor_id }}

@@ -27,6 +27,8 @@
 #   compare <a> <b>          print "newer", "equal" or "older" (a relative to b)
 #   latest-stable            read tags on stdin, print the highest stable one
 #   bump-patch <X.Y.Z>       print X.Y.(Z+1)
+#   issue-token              print the token used for issue calls: ISSUE_GH_TOKEN
+#                            (the maintainer's token) when set, else GH_TOKEN
 #   run                      the full bot: detect, then file the issue and PR
 #
 # `run` reads DRY_RUN (true/false), REPO (owner/name), CHART_FILE, BASE_BRANCH,
@@ -166,7 +168,7 @@ Bump \`appVersion\` to ${target} and patch-bump the chart \`version\`. Check the
 
 ### Additional Context
 
-Filed by the Technitium version tracker.
+**Automation.** This issue was filed automatically by \`.github/workflows/job-technitium-bump.yaml\` (the Technitium Version Tracker) under the maintainer's account. It runs daily and found that the upstream Technitium DNS Server release ${target} is newer than the chart's \`appVersion\` (${current}). The tracker opens a pull request that bumps \`appVersion\` and the chart \`version\`, and closes this issue when it merges. On later runs it updates this issue and that pull request instead of filing new ones. To stop it, close the pull request and this issue, or disable the workflow.
 EOF
 }
 
@@ -250,7 +252,7 @@ run() {
     gh pr edit "$pr_num" -R "$repo" --title "$title" \
       --body "$(pr_body "$pr_issue" "$current" "$latest" "$base_chart_version" "$target_chart_version")"
     if [[ "$pr_issue" =~ ^[0-9]+$ ]]; then
-      gh issue edit "$pr_issue" -R "$repo" --title "$title" --body "$(issue_body "$current" "$latest")"
+      GH_TOKEN="$(issue_token)" gh issue edit "$pr_issue" -R "$repo" --title "$title" --body "$(issue_body "$current" "$latest")"
     fi
     info "updated PR #$pr_num to $latest"
     return 0
@@ -258,16 +260,16 @@ run() {
 
   # Reuse an open issue with the exact title, if a person or an earlier run filed one.
   local issue
-  issue="$(gh issue list -R "$repo" --state open --limit 50 --json number,title \
+  issue="$(GH_TOKEN="$(issue_token)" gh issue list -R "$repo" --state open --limit 50 --json number,title \
     --jq "map(select(.title == \"${title}\")) | first // empty | .number")"
   if [ -n "$issue" ]; then
     info "found open issue #$issue for $latest"
   elif [ "$dry" = true ]; then
-    info "dry run: would file issue '$title' (enhancement, assigned to the repo owner)"
+    info "dry run: would file issue '$title' (dependencies, assigned to the repo owner)"
     issue="<new>"
   else
     local owner="${repo%%/*}" url
-    url="$(gh issue create -R "$repo" --title "$title" --label enhancement \
+    url="$(GH_TOKEN="$(issue_token)" gh issue create -R "$repo" --title "$title" --label dependencies \
       --assignee "$owner" --body "$(issue_body "$current" "$latest")")"
     issue="${url##*/}"
     info "filed issue #$issue ($url)"
@@ -291,6 +293,14 @@ run() {
   info "opened $pr_url"
 }
 
+# Issues are filed as the maintainer, not the app, so they carry the owner's
+# name like any hand-filed issue. The PR stays on the app token.
+issue_token() {
+  local t="${ISSUE_GH_TOKEN:-${GH_TOKEN:-}}"
+  [ -n "$t" ] || die "no ISSUE_GH_TOKEN or GH_TOKEN for issue calls"
+  printf '%s\n' "$t"
+}
+
 main() {
   local cmd="${1:-}"
   shift || true
@@ -299,8 +309,9 @@ main() {
     compare) compare "$1" "$2" ;;
     latest-stable) latest_stable ;;
     bump-patch) bump_patch "$1" ;;
+    issue-token) issue_token ;;
     run) run ;;
-    *) die "usage: $0 {is-stable|compare|latest-stable|bump-patch|run}" ;;
+    *) die "usage: $0 {is-stable|compare|latest-stable|bump-patch|issue-token|run}" ;;
   esac
 }
 

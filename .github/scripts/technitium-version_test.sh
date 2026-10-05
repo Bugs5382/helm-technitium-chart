@@ -53,6 +53,20 @@ check "older major" older "$(cmp 14.3.0 15.0.0)"
 check "compare rejects latest" error "$(cmp latest 15.2.0)"
 check "compare rejects pre-release" error "$(cmp 15.6.0-beta 15.2.0)"
 
+# issue-token: issues are filed as the maintainer when ISSUE_GH_TOKEN is set
+itok() { env -u ISSUE_GH_TOKEN -u GH_TOKEN "$@" bash "$script" issue-token 2>/dev/null || echo error; }
+check "issue token prefers ISSUE_GH_TOKEN" maint "$(itok ISSUE_GH_TOKEN=maint GH_TOKEN=app)"
+check "issue token falls back to GH_TOKEN" app "$(itok GH_TOKEN=app)"
+check "issue token errors when neither is set" error "$(itok)"
+
+# the auto-filed issue says plainly that it is automated and what it does
+body="$(DOCKER_REPO=technitium/dns-server UPSTREAM_REPO=TechnitiumSoftware/DnsServer CHANGELOG_URL=x bash -c 'source "$1"; issue_body 15.5.1 15.6.0' _ "$script" 2>/dev/null)"
+has() { case "$body" in *"$1"*) echo yes ;; *) echo no ;; esac; }
+check "issue body says it is automated" yes "$(has "This issue was filed automatically")"
+check "issue body names the workflow" yes "$(has "job-technitium-bump.yaml")"
+check "issue body names the maintainer token" yes "$(has "maintainer's account")"
+check "issue body says what happens next" yes "$(has "opens a pull request")"
+
 # is-stable
 check "stable three-part" yes "$(stable 15.5.1)"
 check "stable two-part" yes "$(stable 13.1)"
