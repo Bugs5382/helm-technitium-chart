@@ -168,7 +168,7 @@ Bump \`appVersion\` to ${target} and patch-bump the chart \`version\`. Check the
 
 ### Additional Context
 
-Filed by the Technitium version tracker.
+**Automation.** This issue was filed automatically by \`.github/workflows/job-technitium-bump.yaml\` (the Technitium Version Tracker) under the maintainer's account. It runs daily and found that the upstream Technitium DNS Server release ${target} is newer than the chart's \`appVersion\` (${current}). The tracker opens a pull request that bumps \`appVersion\` and the chart \`version\`, and closes this issue when it merges. On later runs it updates this issue and that pull request instead of filing new ones. To stop it, close the pull request and this issue, or disable the workflow.
 EOF
 }
 
