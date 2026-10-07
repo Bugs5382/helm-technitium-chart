@@ -9,6 +9,13 @@ config:
   # Note: In the deployment spec, this is usually pulled from a Secret for better security.
   adminPassword: ""
 
+  # Use an administrator Secret managed outside this release. When set, the chart
+  # does not create an administrator Secret and this Secret takes precedence over
+  # config.adminPassword. It must exist before workloads start.
+  existingSecret: ""
+  # Key in config.existingSecret that contains the administrator password.
+  passwordKey: password
+
   # Comma-separated list of IP addresses the web service should listen on.
   # Usually only needed when using "host" network mode; defaults to "[::]" (all interfaces).
   webServiceLocalAddresses: ""
@@ -290,6 +297,13 @@ cluster:
   # paste them into the "Join Cluster" wizard. Leave empty on the primary.
   primaryReleaseName: ""
 
+  # For a secondary with autoJoin, optionally identify the primary's external
+  # administrator Secret and key. Required when the primary uses an external
+  # Secret.
+  primaryAdminSecretName: ""
+  # Password key in the primary administrator Secret.
+  primaryAdminPasswordKey: password
+
   # When true (default while cluster.enabled), the chart forces HTTPS on the
   # web service with a self-signed cert — required for DANE-EE node-to-node
   # TLS. Set to false only if you are terminating TLS some other way (rare).
@@ -302,14 +316,14 @@ cluster:
   # - Secondary release (cluster.primaryReleaseName is set): runs a post-install
   #   Job that calls /api/admin/cluster/initJoin against this node, pointing at
   #   the primary's URL/ClusterIP and using the primary's admin password (read
-  #   from the primary's `<primaryReleaseName>-technitium-admin` Secret in the
-  #   same namespace — that release must be installed first).
+  #   from cluster.primaryAdminSecretName (`<primaryReleaseName>-technitium-
+  #   admin` by default) — that release must be installed first).
   # Both Jobs are idempotent: they check /api/admin/cluster/state first and
   # exit cleanly if the node is already clustered.
   autoJoin: true
 
-  # Technitium admin username. The chart's secret holds the password under the
-  # `password` key; this is the matching username (Technitium's default is "admin").
+  # Technitium admin username. This is the matching username for the password
+  # in the configured Secret (Technitium's default is "admin").
   adminUsername: "admin"
 
   # Optional 6-digit TOTP code for the admin user when joining a cluster.

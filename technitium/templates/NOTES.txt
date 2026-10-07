@@ -1,9 +1,16 @@
 🚀 Technitium DNS Server has been successfully deployed!
 
+{{- if .Values.config.existingSecret }}
+1. 🔐 Administrator Secret:
+   This release uses the externally managed Secret {{ .Values.config.existingSecret }}
+   (key {{ include "technitium.adminPasswordKey" . }}). It must exist before
+   workloads start. The chart does not own, rotate, or delete it.
+{{- else }}
 1. 🔐 Get your Admin Password:
    Run the following command to retrieve the password for the 'admin' user:
 
    kubectl get secret --namespace {{ .Release.Namespace }} {{ include "technitium.fullname" . }}-admin -o jsonpath="{.data.password}" | base64 --decode; echo
+{{- end }}
 
 2. 🌐 Access the Web UI:
 {{- if .Values.ingress.enabled }}

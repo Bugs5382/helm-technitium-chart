@@ -42,6 +42,8 @@ The following table lists the configurable parameters of the Technitium chart an
 | **Core DNS Configuration** | | | |
 | config.dnsDomain | Primary DNS domain the server identifies as. | `"dns-server"` | **YES** |
 | config.adminPassword | Plain-text admin password (leave empty to auto-generate). | `""` | No |
+| config.existingSecret | Use a pre-created administrator Secret and skip generating one. | `""` | No |
+| config.passwordKey | Password key in `config.existingSecret`. | `password` | No |
 | config.webServiceLocalAddresses | Comma-separated bind addresses for the web UI. | `""` | No |
 | config.webServiceEnableHttps | Enables HTTPS for the management UI. | `false` | No |
 | config.webServiceUseSelfSignedCert | Generates a self-signed cert for the UI when HTTPS is enabled. | `false` | No |
@@ -97,6 +99,8 @@ The following table lists the configurable parameters of the Technitium chart an
 | cluster.enabled | Participate in a Technitium cluster (see Clustering section below). | `false` | No |
 | cluster.domain | Shared cluster zone name; must be identical on every node. | `""` | If `cluster.enabled` |
 | cluster.primaryReleaseName | Helm release name of the primary node (set this on secondaries; empty on the primary). | `""` | No |
+| cluster.primaryAdminSecretName | Primary administrator Secret used by a secondary's autoJoin Job. | Derived from primary release | No |
+| cluster.primaryAdminPasswordKey | Key in the primary administrator Secret. | `password` | No |
 | cluster.autoHttps | Force HTTPS + self-signed cert (required by DANE-EE node-to-node TLS). | `true` | No |
 | cluster.autoJoin | Run a post-install Job that calls the cluster init/join API. | `true` | No |
 | cluster.adminUsername | Admin username used by the join Job to authenticate. | `"admin"` | No |
@@ -170,7 +174,15 @@ The chart `appVersion` tracks the [Technitium DNS Server](https://github.com/Tec
 
 ## 🔐 Security & Admin Password
 
-By default, this chart generates a random 16-character administrative password if `config.adminPassword` is left empty in your `values.yaml`.
+By default, this chart generates a random 16-character administrative password if `config.adminPassword` is left empty in your `values.yaml`. To use a Secret managed outside this Helm release:
+
+```yaml
+config:
+  existingSecret: technitium-admin
+  passwordKey: password
+```
+
+When configured, it takes precedence over `config.adminPassword`.
 
 To retrieve your generated password after deployment, run:
 
@@ -194,7 +206,7 @@ Two (or more) Helm releases of this chart can join a single Technitium cluster �
 
 ### Install order
 
-The primary release **must** be installed first — secondaries' join Jobs read the primary's admin Secret via `secretKeyRef`. Installing a secondary first will leave its Job pod in `CreateContainerConfigError` until the primary's Secret exists.
+The primary release **must** be installed first — secondaries' join Jobs read the primary's admin Secret via `secretKeyRef`. Installing a secondary first will leave its Job pod in `CreateContainerConfigError` until the primary's Secret exists. If the primary uses `config.existingSecret`, set the secondary's `cluster.primaryAdminSecretName` and `cluster.primaryAdminPasswordKey` to the primary Secret name/key.
 
 ### `dnsDomain` must align with `cluster.domain`
 
