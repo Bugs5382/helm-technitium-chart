@@ -9,6 +9,10 @@
 - feat(secrets): support externally managed admin secrets @jvalskis (#57)
 - feat(publish): push the chart to ghcr.io as an OCI artifact on release @Bugs5382 (#55)
 
+#### 🧩 Dependency Updates
+
+- chore(deps): bump Technitium DNS Server to 15.6.0 @Bugs5382 (#58)
+
 ### Extra
 
 **Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.3.0...v0.4.0
