@@ -57,6 +57,11 @@ spec:
         checksum/bootstrap: {{ include (print $.Template.BasePath "/configmap-bootstrap.yaml") . | sha256sum }}
       {{- end }}
     spec:
+      {{- $config := .Values.config | default dict }}
+      {{- $adminSecret := $config.existingSecret | default "" }}
+      {{- if and $adminSecret (not (regexMatch "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" $adminSecret)) }}
+      {{- fail "config.existingSecret must be a valid Kubernetes Secret name" }}
+      {{- end }}
       serviceAccountName: {{ include "technitium.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
@@ -140,8 +145,8 @@ spec:
             - name: DNS_SERVER_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "technitium.fullname" . }}-admin
-                  key: password
+                  name: {{ include "technitium.adminSecretName" . }}
+                  key: {{ include "technitium.adminPasswordKey" . | quote }}
             {{- if .Values.config.preferIpv6 }}
             - name: DNS_SERVER_PREFER_IPV6
               value: {{ .Values.config.preferIpv6 | quote }}
@@ -251,8 +256,8 @@ spec:
             - name: ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "technitium.fullname" . }}-admin
-                  key: password
+                  name: {{ include "technitium.adminSecretName" . }}
+                  key: {{ include "technitium.adminPasswordKey" . | quote }}
             {{- if .Values.cluster.enabled }}
             - name: CATALOG
               value: "cluster-catalog.{{ .Values.cluster.domain }}"

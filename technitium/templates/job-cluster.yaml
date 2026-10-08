@@ -23,6 +23,13 @@ OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 {{- if and .Values.cluster.enabled .Values.cluster.autoJoin -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- $isSecondary := ne (.Values.cluster.primaryReleaseName | toString) "" -}}
+{{- $cluster := .Values.cluster | default dict -}}
+{{- if and $isSecondary $cluster.primaryAdminSecretName (not (regexMatch "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" $cluster.primaryAdminSecretName)) -}}
+{{- fail "cluster.primaryAdminSecretName must be a valid Kubernetes Secret name" -}}
+{{- end -}}
+{{- if and $isSecondary (not $cluster.primaryAdminPasswordKey) -}}
+{{- fail "cluster.primaryAdminPasswordKey must not be empty" -}}
+{{- end -}}
 {{- $primaryFull := "" -}}
 {{- if $isSecondary -}}
 {{- $primaryFull = printf "%s-%s" .Values.cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
@@ -123,8 +130,8 @@ spec:
             - name: MY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "technitium.fullname" . }}-admin
-                  key: password
+                  name: {{ include "technitium.adminSecretName" . }}
+                  key: {{ include "technitium.adminPasswordKey" . | quote }}
             {{- if not $isSecondary }}
             - name: POD_NETWORKS
               value: {{ $podNetworks | join "," | nospace | quote }}
@@ -137,8 +144,8 @@ spec:
             - name: PRIMARY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ printf "%s-admin" $primaryFull | quote }}
-                  key: password
+                  name: {{ include "technitium.primaryAdminSecretName" . | quote }}
+                  key: {{ include "technitium.primaryAdminPasswordKey" . | quote }}
             - name: PRIMARY_TOTP
               value: {{ .Values.cluster.primaryNodeTotp | quote }}
             {{- end }}

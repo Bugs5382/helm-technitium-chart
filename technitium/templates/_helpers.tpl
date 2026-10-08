@@ -27,6 +27,49 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* Effective administrator Secret name and password key. */}}
+{{- define "technitium.adminSecretName" -}}
+{{- $config := .Values.config | default dict -}}
+{{- $existing := $config.existingSecret | default "" -}}
+{{- if $existing -}}{{- $existing -}}{{- else -}}{{- printf "%s-admin" (include "technitium.fullname" .) -}}{{- end -}}
+{{- end }}
+
+{{- define "technitium.adminPasswordKey" -}}
+{{- $config := .Values.config | default dict -}}
+{{- $key := "password" -}}
+{{- if $config.existingSecret -}}
+{{- $key = required "config.passwordKey must not be empty when config.existingSecret is set" $config.passwordKey -}}
+{{- if not (regexMatch "^[-._a-zA-Z0-9]+$" $key) -}}
+{{- fail "config.passwordKey must contain only letters, numbers, dots, underscores, and hyphens" -}}
+{{- end -}}
+{{- end -}}
+{{- $key -}}
+{{- end }}
+
+{{/* Effective primary node Secret settings used by secondary cluster Jobs/NOTES. */}}
+{{- define "technitium.primaryAdminSecretName" -}}
+{{- $cluster := .Values.cluster | default dict -}}
+{{- if $cluster.primaryAdminSecretName -}}
+{{- $cluster.primaryAdminSecretName -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name $cluster.primaryReleaseName -}}
+{{- printf "%s-admin" ($cluster.primaryReleaseName | trunc 63 | trimSuffix "-") -}}
+{{- else -}}
+{{- printf "%s-%s-admin" $cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{- define "technitium.primaryAdminPasswordKey" -}}
+{{- $cluster := .Values.cluster | default dict -}}
+{{- $key := required "cluster.primaryAdminPasswordKey must not be empty" $cluster.primaryAdminPasswordKey -}}
+{{- if not (regexMatch "^[-._a-zA-Z0-9]+$" $key) -}}
+{{- fail "cluster.primaryAdminPasswordKey must contain only letters, numbers, dots, underscores, and hyphens" -}}
+{{- end -}}
+{{- $key -}}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this.
