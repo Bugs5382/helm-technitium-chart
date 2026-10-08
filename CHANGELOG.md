@@ -1,11 +1,12 @@
 # Helm Technitium Chart
 
-## v0.4.0 - 2026-10-05
+## v0.4.0 - 2026-10-08
 
 ### What Changed 👀
 
 #### 🚀 Features
 
+- feat(secrets): support externally managed admin secrets @jvalskis (#57)
 - feat(publish): push the chart to ghcr.io as an OCI artifact on release @Bugs5382 (#55)
 
 ### Extra
