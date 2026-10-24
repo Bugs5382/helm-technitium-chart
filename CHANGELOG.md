@@ -1,5 +1,17 @@
 # Helm Technitium Chart
 
+## v0.4.1 - 2026-10-24
+
+### What Changed 👀
+
+#### 🐛 Bug Fixes
+
+- fix(cluster): match primary service naming to the chart fullname @jvalskis (#62)
+
+### Extra
+
+**Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.4.0...v0.4.1
+
 ## v0.4.0 - 2026-10-08
 
 ### What Changed 👀
