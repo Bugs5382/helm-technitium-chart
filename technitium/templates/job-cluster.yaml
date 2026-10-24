@@ -32,7 +32,12 @@ OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 {{- end -}}
 {{- $primaryFull := "" -}}
 {{- if $isSecondary -}}
+{{/* Issue #61: match technitium.fullname when the primary release contains the chart name. */}}
+{{- if contains $name .Values.cluster.primaryReleaseName -}}
+{{- $primaryFull = .Values.cluster.primaryReleaseName | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
 {{- $primaryFull = printf "%s-%s" .Values.cluster.primaryReleaseName $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
 {{- $podNetworks := .Values.cluster.podNetworks | default list -}}
 {{- if kindIs "string" $podNetworks -}}

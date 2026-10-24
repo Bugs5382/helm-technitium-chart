@@ -1,0 +1,135 @@
+# MIT License
+#
+# Copyright (c) 2026 Shane & Contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+suite: cluster-join Job primary service discovery, issue 61
+templates:
+- job-cluster.yaml
+release:
+  name: secondary
+  namespace: dns
+tests:
+- it: does not repeat the chart name when it is the primary release name
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: technitium
+    config.existingSecret: secondary-admin
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: technitium-web
+- it: does not repeat the chart name contained in a primary release name
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: technitium-primary
+    config.existingSecret: secondary-admin
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: technitium-primary-web
+- it: recognizes the chart name inside the primary release name
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: my-technitium-primary
+    config.existingSecret: secondary-admin
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: my-technitium-primary-web
+- it: appends the chart name for an unrelated primary release name
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: tech-a
+    config.existingSecret: secondary-admin
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: tech-a-technitium-web
+- it: uses a primary release matching the name override without duplication
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: dns
+    config.existingSecret: secondary-admin
+    nameOverride: dns
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: dns-web
+- it: uses a primary release containing the name override without duplication
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: dns-primary
+    config.existingSecret: secondary-admin
+    nameOverride: dns
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: dns-primary-web
+- it: appends the name override for an unrelated primary release name
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: tech-a
+    config.existingSecret: secondary-admin
+    nameOverride: dns
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: tech-a-dns-web
+- it: does not apply the secondary fullname override to the primary service
+  set:
+    cluster.enabled: true
+    cluster.autoJoin: true
+    cluster.domain: ns.example.local
+    cluster.primaryReleaseName: technitium
+    config.existingSecret: secondary-admin
+    fullnameOverride: custom-secondary
+  asserts:
+  - contains:
+      path: spec.template.spec.containers[0].env
+      content:
+        name: PRIMARY_SVC_NAME
+        value: technitium-web
