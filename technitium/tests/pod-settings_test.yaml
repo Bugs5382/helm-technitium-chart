@@ -1,0 +1,158 @@
+# MIT License
+#
+# Copyright (c) 2026 Shane & Contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+suite: Deployment pod settings
+templates:
+  - deployment.yaml
+  - job-cluster.yaml
+tests:
+
+  - it: omits optional pod fields by default
+    template: deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.automountServiceAccountToken
+      - notExists:
+          path: spec.template.spec.enableServiceLinks
+      - notExists:
+          path: spec.template.spec.dnsPolicy
+      - notExists:
+          path: spec.template.spec.dnsConfig
+
+  - it: omits optional pod fields when null or empty
+    template: deployment.yaml
+    set:
+      automountServiceAccountToken: null
+      enableServiceLinks: null
+      dnsPolicy: null
+      dnsConfig: {}
+    asserts:
+      - notExists:
+          path: spec.template.spec.automountServiceAccountToken
+      - notExists:
+          path: spec.template.spec.enableServiceLinks
+      - notExists:
+          path: spec.template.spec.dnsPolicy
+      - notExists:
+          path: spec.template.spec.dnsConfig
+
+  - it: renders explicit false booleans and a complete native DNS configuration
+    template: deployment.yaml
+    set:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      dnsPolicy: None
+      dnsConfig: &dnsConfig
+        nameservers:
+          - 127.0.0.1
+        searches:
+          - svc.cluster.local
+        options:
+          - name: ndots
+            value: '2'
+          - name: single-request-reopen
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - equal:
+          path: spec.template.spec.enableServiceLinks
+          value: false
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: None
+      - equal:
+          path: spec.template.spec.dnsConfig
+          value: *dnsConfig
+
+  - it: renders explicit true booleans
+    template: deployment.yaml
+    set:
+      automountServiceAccountToken: true
+      enableServiceLinks: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+      - equal:
+          path: spec.template.spec.enableServiceLinks
+          value: true
+
+  - it: renders a DNS policy independently of DNS config
+    template: deployment.yaml
+    set:
+      dnsPolicy: Default
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: Default
+      - notExists:
+          path: spec.template.spec.dnsConfig
+
+  - it: keeps primary init Job DNS and token settings independent
+    template: job-cluster.yaml
+    set:
+      cluster.enabled: true
+      cluster.domain: ns.example.local
+      cluster.podNetworks:
+        - 10.42.0.0/16
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 127.0.0.1
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - notExists:
+          path: spec.template.spec.enableServiceLinks
+      - notExists:
+          path: spec.template.spec.dnsPolicy
+      - notExists:
+          path: spec.template.spec.dnsConfig
+
+  - it: keeps secondary join Job DNS and token settings independent
+    template: job-cluster.yaml
+    set:
+      cluster.enabled: true
+      cluster.domain: ns.example.local
+      cluster.primaryReleaseName: technitium
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 127.0.0.1
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - notExists:
+          path: spec.template.spec.enableServiceLinks
+      - notExists:
+          path: spec.template.spec.dnsPolicy
+      - notExists:
+          path: spec.template.spec.dnsConfig
