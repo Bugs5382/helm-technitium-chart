@@ -87,6 +87,7 @@ The following table lists the configurable parameters of the Technitium chart an
 | service.dns.externalTrafficPolicy | Set to `Local` to preserve client source IPs. | `""` | No |
 | **Workload** | | | |
 | resources | Resource requests and limits for the container. | `{}` | No |
+| affinity | Native Kubernetes affinity rules for the Deployment pod. Supports Helm templates; does not apply to the cluster hook Job. | `{}` | No |
 | securityContext | Security context for the container. | `{}` | No |
 | **Persistence** | | | |
 | persistence.enabled | Create/mount a PVC for `/etc/dns`. Set `false` to use an `emptyDir`: everything in `/etc/dns` is lost when the pod is replaced (see Running without persistence). | `true` | No |
@@ -207,6 +208,57 @@ Two (or more) Helm releases of this chart can join a single Technitium cluster â
 ### Install order
 
 The primary release **must** be installed first â€” secondaries' join Jobs read the primary's admin Secret via `secretKeyRef`. Installing a secondary first will leave its Job pod in `CreateContainerConfigError` until the primary's Secret exists. If the primary uses `config.existingSecret`, set the secondary's `cluster.primaryAdminSecretName` and `cluster.primaryAdminPasswordKey` to the primary Secret name/key.
+
+### Spread cluster nodes across Kubernetes nodes
+
+Separate Helm releases can otherwise be scheduled on the same Kubernetes node.
+Set `affinity` to native Kubernetes `nodeAffinity`, `podAffinity`, and/or
+`podAntiAffinity` rules. The default `{}` leaves placement unconstrained by the
+chart. Affinity values support Helm templates in the release context.
+
+Apply the following values to **every release** in the Technitium cluster to
+require a different Kubernetes node for each DNS server:
+
+```yaml
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            technitium.io/cluster-domain: '{{ .Values.cluster.domain | replace "." "-" | trunc 63 | trimSuffix "-" }}'
+```
+
+This uses the chart's shared cluster-domain label, whose value replaces dots
+with hyphens and is truncated to 63 characters. It matches primary and secondary
+DNS pods in the same namespace, including peers with different release names.
+A release-specific `app.kubernetes.io/instance` selector would not match those
+peers. Pods with a different cluster-domain label and the init/join hook pods
+are not selected. Choose cluster domains whose normalized label values are
+distinct; dot replacement and truncation can otherwise cause collisions.
+
+Required anti-affinity leaves a DNS pod Pending when no eligible node remains:
+a three-node Technitium cluster needs three eligible Kubernetes nodes. To prefer
+separation while allowing co-location when capacity is limited, use:
+
+```yaml
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              technitium.io/cluster-domain: '{{ .Values.cluster.domain | replace "." "-" | trunc 63 | trimSuffix "-" }}'
+```
+
+These rules apply to the DNS Deployment only. The init/join hook Jobs do not
+inherit them, so installing a node does not require an additional spare node
+for its hook. Kubernetes evaluates these rules when scheduling; adding them
+does not itself rebalance existing pods. Updating `affinity` changes the pod
+template and triggers this chart's Recreate rollout, so upgrade cluster members
+one at a time.
 
 ### `dnsDomain` must align with `cluster.domain`
 

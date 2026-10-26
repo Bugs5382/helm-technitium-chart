@@ -1,0 +1,157 @@
+# MIT License
+#
+# Copyright (c) 2026 Shane & Contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+suite: Deployment affinity
+templates:
+  - deployment.yaml
+  - job-cluster.yaml
+tests:
+
+  - it: omits affinity by default
+    template: deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+
+  - it: omits affinity when explicitly disabled with null
+    template: deployment.yaml
+    set:
+      affinity: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+
+  - it: preserves required pod anti-affinity
+    template: deployment.yaml
+    set:
+      affinity: &requiredAntiAffinity
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  technitium.io/cluster-domain: ns-example-local
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity
+          value: *requiredAntiAffinity
+
+  - it: preserves preferred pod anti-affinity and its weight
+    template: deployment.yaml
+    set:
+      affinity: &preferredAntiAffinity
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    technitium.io/cluster-domain: ns-example-local
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity
+          value: *preferredAntiAffinity
+
+  - it: supports combined native node and pod affinity outside cluster mode
+    template: deployment.yaml
+    set:
+      affinity: &combinedAffinity
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.example/dns
+                    operator: In
+                    values:
+                      - 'true'
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                topologyKey: topology.kubernetes.io/zone
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: resolver-client
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity
+          value: *combinedAffinity
+
+  - it: evaluates affinity templates in the release context
+    template: deployment.yaml
+    release:
+      name: technitium-2
+      namespace: dns
+    set:
+      cluster.enabled: true
+      cluster.domain: ns.example.local
+      cluster.primaryReleaseName: technitium
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              namespaces:
+                - '{{ .Release.Namespace }}'
+              labelSelector:
+                matchLabels:
+                  technitium.io/cluster-domain: '{{ .Values.cluster.domain | replace "." "-" | trunc 63 | trimSuffix "-" }}'
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].labelSelector.matchLabels["technitium.io/cluster-domain"]
+          value: ns-example-local
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].namespaces
+          value:
+            - dns
+      - equal:
+          path: spec.template.metadata.labels["technitium.io/cluster-domain"]
+          value: ns-example-local
+
+  - it: does not apply workload anti-affinity to the cluster init Job
+    template: job-cluster.yaml
+    set:
+      cluster.enabled: true
+      cluster.domain: ns.example.local
+      cluster.podNetworks:
+        - 10.42.0.0/16
+      affinity: *requiredAntiAffinity
+    asserts:
+      - isKind:
+          of: Job
+      - notExists:
+          path: spec.template.spec.affinity
+      - notExists:
+          path: spec.template.metadata.labels["technitium.io/cluster-domain"]
+
+  - it: does not apply workload anti-affinity to the cluster join Job
+    template: job-cluster.yaml
+    set:
+      cluster.enabled: true
+      cluster.domain: ns.example.local
+      cluster.primaryReleaseName: technitium
+      affinity: *requiredAntiAffinity
+    asserts:
+      - isKind:
+          of: Job
+      - notExists:
+          path: spec.template.spec.affinity
+      - notExists:
+          path: spec.template.metadata.labels["technitium.io/cluster-domain"]

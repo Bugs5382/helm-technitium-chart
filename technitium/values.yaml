@@ -193,6 +193,13 @@ service:
 #     memory: 512Mi
 resources: {}
 
+# Native Kubernetes affinity rules for the Technitium Deployment pod.
+# Supports nodeAffinity, podAffinity, and podAntiAffinity. Values are evaluated
+# as Helm templates in the release context. Empty means no affinity rules.
+# Does not apply to the cluster init/join hook Job. See README "Spread cluster
+# nodes across Kubernetes nodes" for required and preferred anti-affinity.
+affinity: {}
+
 # Pod-level security context. Defaults satisfy the Kubernetes
 # "restricted" Pod Security Standard. Override with `{}` if your
 # Technitium image variant cannot run as a non-root user.
