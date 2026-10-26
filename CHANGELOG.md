@@ -1,5 +1,17 @@
 # Helm Technitium Chart
 
+## v0.5.0 - 2026-10-26
+
+### What Changed 👀
+
+#### 🚀 Features
+
+- feat(cluster): support native Deployment affinity @jvalskis (#64)
+
+### Extra
+
+**Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.4.1...v0.5.0
+
 ## v0.4.1 - 2026-10-24
 
 ### What Changed 👀
