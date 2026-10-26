@@ -130,12 +130,10 @@ The following table lists the configurable parameters of the Technitium chart an
 
 ### Deployment pod DNS and ServiceAccount settings
 
-The pod settings above apply only to the Technitium Deployment. For a DNS server
-that should resolve through itself rather than the cluster resolver, use:
+The pod settings above apply only to the Technitium Deployment. To make the
+DNS server pod resolve through itself rather than the cluster resolver, use:
 
 ```yaml
-automountServiceAccountToken: false
-enableServiceLinks: false
 dnsPolicy: None
 dnsConfig:
   nameservers:
