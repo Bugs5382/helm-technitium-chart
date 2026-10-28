@@ -1,5 +1,17 @@
 # Helm Technitium Chart
 
+## v0.6.0 - 2026-10-28
+
+### What Changed 👀
+
+#### 🚀 Features
+
+- feat: expose DNS and service-account settings @jvalskis (#66)
+
+### Extra
+
+**Full Changelog**: https://github.com/Bugs5382/helm-technitium-chart/compare/v0.5.0...v0.6.0
+
 ## v0.5.0 - 2026-10-26
 
 ### What Changed 👀
