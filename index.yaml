@@ -3,6 +3,24 @@ entries:
   technitium:
   - apiVersion: v2
     appVersion: 15.6.0
+    created: "2026-10-28T14:47:12.192431263Z"
+    description: A Helm chart for deploying Technitium DNS Server on Kubernetes, providing
+      recursive DNS resolution, blocklists, DoH/DoT/DoQ encrypted protocols, and a
+      web-based management console.
+    digest: 0bce8ce2723c9fdfbce80b42494dc4d8a6dff46a2345a54cd9fb9636faa40215
+    home: https://github.com/Bugs5382/helm-technitium-chart
+    icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/technitium.png
+    maintainers:
+    - email: sfroebel@therabbithole.com
+      name: Shane
+      url: https://github.com/Bugs5382
+    name: technitium
+    type: application
+    urls:
+    - https://github.com/Bugs5382/helm-technitium-chart/releases/download/v0.6.0/technitium-0.6.0.tgz
+    version: 0.6.0
+  - apiVersion: v2
+    appVersion: 15.6.0
     created: "2026-10-26T14:46:46.037483625Z"
     description: A Helm chart for deploying Technitium DNS Server on Kubernetes, providing
       recursive DNS resolution, blocklists, DoH/DoT/DoQ encrypted protocols, and a
@@ -102,4 +120,4 @@ entries:
     urls:
     - https://github.com/Bugs5382/helm-technitium-chart/releases/download/v0.1.0/technitium-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-26T14:46:46.037497336Z"
+generated: "2026-10-28T14:47:12.192478037Z"
