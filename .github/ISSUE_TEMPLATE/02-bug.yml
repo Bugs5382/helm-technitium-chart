@@ -18,45 +18,28 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-name: 🚀 Feature Request
-description: Suggest an idea or enhancement for the Technitium Helm chart.
-title: "[Feature]: "
-labels: ["enhancement"]
+name: Bug report
+description: A defect in existing behavior.
+title: "fix(<scope>): <short description>"
+labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for suggesting an improvement! Please describe the feature you'd
-        like to see.
-
   - type: textarea
-    id: problem
+    id: what-happened
     attributes:
-      label: Problem Statement
-      description: What problem are you trying to solve? Is your feature request related to a pain point?
+      label: What happened
+      description: The observed behavior, with steps to reproduce.
     validations:
       required: true
-
   - type: textarea
-    id: proposal
+    id: expected
     attributes:
-      label: Proposed Solution
-      description: How would you like this to work?
+      label: Expected behavior
     validations:
       required: true
-
   - type: textarea
-    id: alternatives
+    id: environment
     attributes:
-      label: Alternatives Considered
-      description: Other approaches you've considered.
-    validations:
-      required: false
-
-  - type: textarea
-    id: additional
-    attributes:
-      label: Additional Context
-      description: Screenshots, links, or any other context.
+      label: Environment
+      description: Version, OS/runtime, and any relevant logs.
     validations:
       required: false
