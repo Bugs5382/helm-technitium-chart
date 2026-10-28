@@ -193,6 +193,14 @@ service:
 #     memory: 512Mi
 resources: {}
 
+# Optional native pod settings for the Technitium Deployment only. Null or
+# empty values leave these fields unset so Kubernetes uses its defaults.
+# The cluster init/join Job keeps its own ServiceAccount and DNS settings.
+automountServiceAccountToken: null
+enableServiceLinks: null
+dnsPolicy: null
+dnsConfig: {}
+
 # Native Kubernetes affinity rules for the Technitium Deployment pod.
 # Supports nodeAffinity, podAffinity, and podAntiAffinity. Values are evaluated
 # as Helm templates in the release context. Empty means no affinity rules.

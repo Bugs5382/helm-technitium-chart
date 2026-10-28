@@ -87,6 +87,10 @@ The following table lists the configurable parameters of the Technitium chart an
 | service.dns.externalTrafficPolicy | Set to `Local` to preserve client source IPs. | `""` | No |
 | **Workload** | | | |
 | resources | Resource requests and limits for the container. | `{}` | No |
+| automountServiceAccountToken | Mount the Deployment pod's ServiceAccount token (`true` or `false`); unset leaves the Kubernetes default. Does not affect the cluster hook Job. | `null` | No |
+| enableServiceLinks | Inject environment variables for Services into the Deployment pod (`true` or `false`); unset leaves the Kubernetes default. | `null` | No |
+| dnsPolicy | DNS policy for the Deployment pod, such as `None` with `dnsConfig`; unset leaves the Kubernetes default. Does not affect the cluster hook Job. | `null` | No |
+| dnsConfig | Native DNS configuration for the Deployment pod (`nameservers`, `searches`, `options`); empty means unset. Does not affect the cluster hook Job. | `{}` | No |
 | affinity | Native Kubernetes affinity rules for the Deployment pod. Supports Helm templates; does not apply to the cluster hook Job. | `{}` | No |
 | securityContext | Security context for the container. | `{}` | No |
 | **Persistence** | | | |
@@ -123,6 +127,29 @@ The following table lists the configurable parameters of the Technitium chart an
 | bootstrap.resources | Resources for the bootstrap sidecar. | 5m/8Mi requests, 100m/32Mi limits | No |
 
 > **Note:** If `ports.dhcp.enabled` is set to `true`, the pod may require `hostNetwork: true` or specific CNI configurations to broadcast DHCP discovery packets correctly.
+
+### Deployment pod DNS and ServiceAccount settings
+
+The pod settings above apply only to the Technitium Deployment. To make the
+DNS server pod resolve through itself rather than the cluster resolver, use:
+
+```yaml
+dnsPolicy: None
+dnsConfig:
+  nameservers:
+    - 127.0.0.1
+```
+
+`dnsPolicy: None` requires at least one `dnsConfig.nameservers` entry. The DNS
+server must be able to start and resolve using its configured forwarders before
+this loopback resolver is useful. Check that setup in your environment; this
+chart setting alone does not establish that recursion works or prevent DNS
+dependency cycles. You can also set native `dnsConfig.searches` and
+`dnsConfig.options` when needed.
+
+The cluster init/join Job keeps its ServiceAccount token disabled and uses
+Kubernetes DNS to resolve peer Services. It does not inherit these Deployment
+pod settings.
 
 ## 💾 Running without persistence
 
