@@ -58,7 +58,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3.1.1
         with:
-          client-id: "Iv23ligVrrLzGPXe28dn"
+          client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout Code
@@ -140,7 +140,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3.1.1
         with:
-          client-id: "Iv23ligVrrLzGPXe28dn"
+          client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout
