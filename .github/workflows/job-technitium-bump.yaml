@@ -19,13 +19,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 name: Technitium Version Tracker
-# Opens an issue and a bump PR when a newer stable Technitium DNS Server image
-# is on Docker Hub than the chart appVersion (issue #37). The owner still
-# reviews, merges and releases. The logic lives in
+# Files or updates an issue with the release GitHub App when a newer stable
+# Technitium DNS Server image is on Docker Hub than the chart appVersion
+# (issue #37). It opens no PR: the bump is done by hand. The logic lives in
 # .github/scripts/technitium-version.sh so it can be unit-tested.
-#
-# The PR is opened with the release GitHub App token, not GITHUB_TOKEN, because
-# a PR opened with GITHUB_TOKEN does not trigger the repo's CI.
 
 on:
   schedule:
@@ -80,16 +77,10 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          fetch-depth: 0
 
-      - name: Check for a new release and open the bump
+      - name: Check for a new release and file the issue
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Issues are filed as the maintainer; empty falls back to the app token.
-          ISSUE_GH_TOKEN: ${{ secrets.ISSUE_TOKEN }}
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
-          GITHUB_ACTOR_ID: ${{ github.actor_id }}
         run: bash .github/scripts/technitium-version.sh run

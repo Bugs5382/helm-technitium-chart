@@ -26,21 +26,17 @@
 #   is-stable <tag>          exit 0 when <tag> is a stable release (X.Y or X.Y.Z)
 #   compare <a> <b>          print "newer", "equal" or "older" (a relative to b)
 #   latest-stable            read tags on stdin, print the highest stable one
-#   bump-patch <X.Y.Z>       print X.Y.(Z+1)
-#   issue-token              print the token used for issue calls: ISSUE_GH_TOKEN
-#                            (the maintainer's token) when set, else GH_TOKEN
-#   run                      the full bot: detect, then file the issue and PR
+#   run                      the full bot: detect, then file or update the issue
 #
-# `run` reads DRY_RUN (true/false), REPO (owner/name), CHART_FILE, BASE_BRANCH,
-# and uses `gh` for GitHub calls. With DRY_RUN=true it only logs what it would
-# do and never writes to GitHub or git.
+# `run` reads DRY_RUN (true/false), REPO (owner/name) and CHART_FILE, and uses
+# `gh` for GitHub calls. With DRY_RUN=true it only logs what it would do and
+# never writes to GitHub.
 
 set -euo pipefail
 
 DOCKER_REPO="${DOCKER_REPO:-technitium/dns-server}"
 UPSTREAM_REPO="${UPSTREAM_REPO:-TechnitiumSoftware/DnsServer}"
 CHART_FILE="${CHART_FILE:-technitium/Chart.yaml}"
-BASE_BRANCH="${BASE_BRANCH:-main}"
 TITLE_PREFIX="chore(deps): bump Technitium DNS Server to "
 CHANGELOG_URL="https://github.com/${UPSTREAM_REPO}/blob/master/CHANGELOG.md"
 
@@ -90,13 +86,6 @@ latest_stable() {
   printf '%s\n' "$best"
 }
 
-bump_patch() {
-  local v="$1" m n p
-  is_stable "$v" || die "bump-patch: not a stable version: '$v'"
-  IFS=. read -r m n p <<<"$v"
-  printf '%s.%s.%s\n' "$m" "$n" "$((10#${p:-0} + 1))"
-}
-
 chart_field() {
   sed -n "s/^$1:[[:space:]]*\"\{0,1\}\([^\"]*\)\"\{0,1\}[[:space:]]*$/\1/p" "$CHART_FILE" | head -n1
 }
@@ -111,45 +100,6 @@ docker_tags() {
 upstream_release() {
   gh release view -R "$UPSTREAM_REPO" --json tagName,isPrerelease \
     --jq 'select(.isPrerelease == false) | .tagName' 2>/dev/null | sed 's/^v//'
-}
-
-# Edit Chart.yaml in place: appVersion -> $1, version -> $2.
-write_chart() {
-  sed -i.bak \
-    -e "s/^appVersion:.*/appVersion: \"$1\"/" \
-    -e "s/^version:.*/version: $2/" "$CHART_FILE"
-  rm -f "${CHART_FILE}.bak"
-}
-
-pr_body() {
-  local issue="$1" current="$2" target="$3" chart_from="$4" chart_to="$5"
-  cat <<EOF
-## What and why
-
-Technitium DNS Server ${target} is out on Docker Hub (\`${DOCKER_REPO}:${target}\`). This bumps the chart \`appVersion\` from ${current} to ${target} and the chart \`version\` from ${chart_from} to ${chart_to} (patch).
-
-Release notes: https://github.com/${UPSTREAM_REPO}/releases/tag/v${target}
-Changelog: ${CHANGELOG_URL}
-
-Closes #${issue}
-
-## Verification
-
-- [ ] Read the upstream notes from ${current} to ${target} for breaking changes, new or renamed env vars, new ports, and cluster API changes the join Job relies on
-- [ ] Bump the chart \`version\` to a minor instead if the notes need chart changes
-- [ ] Test install and upgrade from ${current} in a throwaway namespace on the Pi
-- [ ] CI green
-- [ ] Publish the chart release by hand after merge
-
-## How this was verified
-
-Opened by the Technitium version tracker (\`.github/workflows/job-technitium-bump.yaml\`). It compared the latest stable Docker Hub tag with \`appVersion\` in \`${CHART_FILE}\`. Nothing here has been installed yet; see the checklist above.
-
----
-
-**Before merging:** add a closing comment summarizing what was actually done in this PR
-(not just the checked boxes).
-EOF
 }
 
 issue_body() {
@@ -168,16 +118,8 @@ Bump \`appVersion\` to ${target} and patch-bump the chart \`version\`. Check the
 
 ### Additional Context
 
-**Automation.** This issue was filed automatically by \`.github/workflows/job-technitium-bump.yaml\` (the Technitium Version Tracker) under the maintainer's account. It runs daily and found that the upstream Technitium DNS Server release ${target} is newer than the chart's \`appVersion\` (${current}). The tracker opens a pull request that bumps \`appVersion\` and the chart \`version\`, and closes this issue when it merges. On later runs it updates this issue and that pull request instead of filing new ones. To stop it, close the pull request and this issue, or disable the workflow.
+**Automation.** This issue was filed automatically by \`.github/workflows/job-technitium-bump.yaml\` (the Technitium Version Tracker) with the release GitHub App. It runs daily and found that the upstream Technitium DNS Server release ${target} is newer than the chart's \`appVersion\` (${current}). The tracker opens no pull request: the bump is done by hand, and this issue closes when that bump merges. On later runs it updates this issue instead of filing a new one. To stop it, disable the workflow.
 EOF
-}
-
-git_identity() {
-  local actor="${GITHUB_ACTOR:?GITHUB_ACTOR is required}"
-  local actor_id="${GITHUB_ACTOR_ID:?GITHUB_ACTOR_ID is required}"
-  git config user.name "$actor"
-  git config user.email "${actor_id}+${actor}@users.noreply.github.com"
-  debug "git identity set to ${actor} (${actor_id})"
 }
 
 run() {
@@ -185,7 +127,7 @@ run() {
   local repo="${REPO:-${GITHUB_REPOSITORY:-}}"
   [ -n "$repo" ] || die "REPO or GITHUB_REPOSITORY must be set"
   [ -f "$CHART_FILE" ] || die "chart file not found: $CHART_FILE"
-  info "start: repo=$repo chart=$CHART_FILE base=$BASE_BRANCH dry_run=$dry"
+  info "start: repo=$repo chart=$CHART_FILE dry_run=$dry"
 
   local current chart_version
   current="$(chart_field appVersion)"
@@ -218,87 +160,35 @@ run() {
   fi
 
   local title="${TITLE_PREFIX}${latest}"
-  local base_chart_version target_chart_version
-  base_chart_version="$chart_version"
-  target_chart_version="$(bump_patch "$base_chart_version")"
 
-  # An open bump PR from an earlier run, for this or an older version.
-  local open_pr
-  open_pr="$(gh pr list -R "$repo" --state open --limit 50 \
-    --json number,title,headRefName \
-    --jq "map(select(.title | startswith(\"${TITLE_PREFIX}\"))) | first // empty | \"\(.number) \(.headRefName) \(.title)\"")"
+  # An open issue from an earlier run, for this or an older version.
+  local open_issue
+  open_issue="$(gh issue list -R "$repo" --state open --limit 50 --json number,title \
+    --jq "map(select(.title | startswith(\"${TITLE_PREFIX}\"))) | first // empty | \"\(.number) \(.title)\"")"
 
-  if [ -n "$open_pr" ]; then
-    local pr_num pr_branch _rest pr_version
-    read -r pr_num pr_branch _rest <<<"$open_pr"
-    pr_version="${open_pr##*"${TITLE_PREFIX}"}"
-    info "found open bump PR #$pr_num ($pr_branch) for $pr_version"
-    if [ "$pr_version" = "$latest" ]; then
-      info "nothing to do: PR #$pr_num already targets $latest"
-      return 0
+  if [ -n "$open_issue" ]; then
+    local issue="${open_issue%% *}" issue_version="${open_issue##*"${TITLE_PREFIX}"}"
+    info "found open issue #$issue for $issue_version"
+    if [ "$issue_version" = "$latest" ]; then
+      info "nothing to do: issue #$issue already targets $latest"
+    elif [ "$dry" = true ]; then
+      info "dry run: would update issue #$issue to '$title'"
+    else
+      gh issue edit "$issue" -R "$repo" --title "$title" --body "$(issue_body "$current" "$latest")"
+      info "updated issue #$issue to $latest"
     fi
-    local pr_issue="${pr_branch#chore/}"; pr_issue="${pr_issue%%-*}"
-    if [ "$dry" = true ]; then
-      info "dry run: would update PR #$pr_num to $latest (appVersion $current -> $latest, version $base_chart_version -> $target_chart_version), retitle it and issue #$pr_issue to '$title'"
-      return 0
-    fi
-    git_identity
-    git fetch origin "$pr_branch"
-    git checkout -B "$pr_branch" "origin/$pr_branch"
-    write_chart "$latest" "$target_chart_version"
-    git add "$CHART_FILE"
-    git commit -m "$title"
-    git push origin "$pr_branch"
-    gh pr edit "$pr_num" -R "$repo" --title "$title" \
-      --body "$(pr_body "$pr_issue" "$current" "$latest" "$base_chart_version" "$target_chart_version")"
-    if [[ "$pr_issue" =~ ^[0-9]+$ ]]; then
-      GH_TOKEN="$(issue_token)" gh issue edit "$pr_issue" -R "$repo" --title "$title" --body "$(issue_body "$current" "$latest")"
-    fi
-    info "updated PR #$pr_num to $latest"
     return 0
   fi
 
-  # Reuse an open issue with the exact title, if a person or an earlier run filed one.
-  local issue
-  issue="$(GH_TOKEN="$(issue_token)" gh issue list -R "$repo" --state open --limit 50 --json number,title \
-    --jq "map(select(.title == \"${title}\")) | first // empty | .number")"
-  if [ -n "$issue" ]; then
-    info "found open issue #$issue for $latest"
-  elif [ "$dry" = true ]; then
-    info "dry run: would file issue '$title' (dependencies, assigned to the repo owner)"
-    issue="<new>"
-  else
-    local owner="${repo%%/*}" url
-    url="$(GH_TOKEN="$(issue_token)" gh issue create -R "$repo" --title "$title" --label dependencies \
-      --assignee "$owner" --body "$(issue_body "$current" "$latest")")"
-    issue="${url##*/}"
-    info "filed issue #$issue ($url)"
-  fi
-
-  local branch="chore/${issue}-technitium-${latest}"
   if [ "$dry" = true ]; then
-    info "dry run: would create branch $branch from $BASE_BRANCH, set appVersion $current -> $latest and version $base_chart_version -> $target_chart_version, and open PR '$title' closing #$issue"
+    info "dry run: would file issue '$title' (dependencies, assigned to the repo owner)"
     return 0
   fi
 
-  git_identity
-  git checkout -B "$branch" "origin/$BASE_BRANCH"
-  write_chart "$latest" "$target_chart_version"
-  git add "$CHART_FILE"
-  git commit -m "$title"
-  git push origin "$branch"
-  local pr_url
-  pr_url="$(gh pr create -R "$repo" --base "$BASE_BRANCH" --head "$branch" --title "$title" \
-    --body "$(pr_body "$issue" "$current" "$latest" "$base_chart_version" "$target_chart_version")")"
-  info "opened $pr_url"
-}
-
-# Issues are filed as the maintainer, not the app, so they carry the owner's
-# name like any hand-filed issue. The PR stays on the app token.
-issue_token() {
-  local t="${ISSUE_GH_TOKEN:-${GH_TOKEN:-}}"
-  [ -n "$t" ] || die "no ISSUE_GH_TOKEN or GH_TOKEN for issue calls"
-  printf '%s\n' "$t"
+  local url
+  url="$(gh issue create -R "$repo" --title "$title" --label dependencies \
+    --assignee "${repo%%/*}" --body "$(issue_body "$current" "$latest")")"
+  info "filed issue ${url##*/} ($url)"
 }
 
 main() {
@@ -308,10 +198,8 @@ main() {
     is-stable) is_stable "${1:-}" ;;
     compare) compare "$1" "$2" ;;
     latest-stable) latest_stable ;;
-    bump-patch) bump_patch "$1" ;;
-    issue-token) issue_token ;;
     run) run ;;
-    *) die "usage: $0 {is-stable|compare|latest-stable|bump-patch|issue-token|run}" ;;
+    *) die "usage: $0 {is-stable|compare|latest-stable|run}" ;;
   esac
 }
 

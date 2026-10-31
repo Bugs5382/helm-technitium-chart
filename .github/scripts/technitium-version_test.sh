@@ -53,19 +53,14 @@ check "older major" older "$(cmp 14.3.0 15.0.0)"
 check "compare rejects latest" error "$(cmp latest 15.2.0)"
 check "compare rejects pre-release" error "$(cmp 15.6.0-beta 15.2.0)"
 
-# issue-token: issues are filed as the maintainer when ISSUE_GH_TOKEN is set
-itok() { env -u ISSUE_GH_TOKEN -u GH_TOKEN "$@" bash "$script" issue-token 2>/dev/null || echo error; }
-check "issue token prefers ISSUE_GH_TOKEN" maint "$(itok ISSUE_GH_TOKEN=maint GH_TOKEN=app)"
-check "issue token falls back to GH_TOKEN" app "$(itok GH_TOKEN=app)"
-check "issue token errors when neither is set" error "$(itok)"
-
 # the auto-filed issue says plainly that it is automated and what it does
 body="$(DOCKER_REPO=technitium/dns-server UPSTREAM_REPO=TechnitiumSoftware/DnsServer CHANGELOG_URL=x bash -c 'source "$1"; issue_body 15.5.1 15.6.0' _ "$script" 2>/dev/null)"
 has() { case "$body" in *"$1"*) echo yes ;; *) echo no ;; esac; }
 check "issue body says it is automated" yes "$(has "This issue was filed automatically")"
 check "issue body names the workflow" yes "$(has "job-technitium-bump.yaml")"
-check "issue body names the maintainer token" yes "$(has "maintainer's account")"
-check "issue body says what happens next" yes "$(has "opens a pull request")"
+check "issue body names the App" yes "$(has "release GitHub App")"
+check "issue body says no PR follows" yes "$(has "opens no pull request")"
+check "issue body says when it closes" yes "$(has "closes when")"
 
 # is-stable
 check "stable three-part" yes "$(stable 15.5.1)"
@@ -82,9 +77,43 @@ check "latest-stable picks highest stable" 15.5.1 "$got"
 got="$(printf '%s\n' latest nightly | bash "$script" latest-stable 2>/dev/null || echo none)"
 check "latest-stable with no stable tags" none "$got"
 
-# bump-patch
-check "bump-patch" 0.3.1 "$(bash "$script" bump-patch 0.3.0)"
-check "bump-patch two-part" 13.1.1 "$(bash "$script" bump-patch 13.1)"
+# run: a stub gh records every call, and the tracker only ever touches issues
+runit() { # <latest> <open issue title or empty>
+  local tmp; tmp="$(mktemp -d)"
+  printf 'name: technitium\nversion: 0.6.0\nappVersion: 15.0.0\n' >"$tmp/Chart.yaml"
+  (
+    # shellcheck source=/dev/null
+    source "$script"
+    docker_tags() { printf '%s\n' "$LATEST"; }
+    upstream_release() { :; }
+    gh() {
+      printf '%s\n' "$*" >>"$tmp/calls"
+      case "$1 $2" in
+        "issue list") [ -z "$OPEN" ] || echo "12 $OPEN" ;;
+        "issue create") echo "https://github.com/o/r/issues/13" ;;
+      esac
+    }
+    git() { printf 'git %s\n' "$*" >>"$tmp/calls"; }
+    LATEST="$1" OPEN="$2"
+    CHART_FILE="$tmp/Chart.yaml" REPO=o/r run
+  ) >/dev/null 2>&1
+  touch "$tmp/calls"; cat "$tmp/calls"; rm -rf "$tmp"
+}
+calls="$(runit 15.1.0 '')"
+hasc() { case "$calls" in *"$1"*) echo yes ;; *) echo no ;; esac; }
+check "new version files an issue" yes "$(hasc "issue create")"
+check "the issue is assigned to the owner" yes "$(hasc "--assignee o")"
+check "the issue carries its label" yes "$(hasc "--label dependencies")"
+check "new version opens no PR" no "$(hasc "pr ")"
+check "new version pushes nothing" no "$(hasc "git ")"
+calls="$(runit 15.1.0 'chore(deps): bump Technitium DNS Server to 15.0.9')"
+check "older open issue is updated" yes "$(hasc "issue edit 12")"
+check "older open issue files no other" no "$(hasc "issue create")"
+calls="$(runit 15.1.0 'chore(deps): bump Technitium DNS Server to 15.1.0')"
+check "current open issue is left alone" no "$(hasc "issue edit")"
+check "current open issue files no other" no "$(hasc "issue create")"
+calls="$(runit 15.0.0 '')"
+check "no newer version calls nothing" no "$(hasc "issue ")"
 
 echo "passed: $pass, failed: $fail"
 [ "$fail" -eq 0 ]
