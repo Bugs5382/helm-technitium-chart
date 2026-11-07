@@ -1,6 +1,6 @@
 # Helm Technitium Chart
 
-## v0.6.1 - 2026-10-31
+## v0.6.1 - 2026-11-07
 
 ### What Changed 👀
 
@@ -11,6 +11,10 @@
 #### ⚠️ Changes
 
 - fix(tracker): file an issue for new Technitium versions and open no PR @Bugs5382 (#74)
+
+#### 🧩 Dependency Updates
+
+- chore(deps): bump Technitium DNS Server to 15.6.2 @Bugs5382 (#77)
 
 ### Extra
 
